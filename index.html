@@ -15,11 +15,11 @@
 
     <section class="hud">
       <div>HP <span id="hpText">3</span></div>
-      <div>Wave <span id="waveText">1</span>/<span id="finalWaveText">20</span></div>
-      <div>Difficulty <span id="difficultyText">1단계</span></div>
+      <div>Wave <span id="waveText">1</span>/<span id="finalWaveText">∞</span></div>
+      <div>Chapter <span id="difficultyText">1단계</span></div>
       <div>Time <span id="timeText">20</span>s</div>
       <div>Score <span id="scoreText">0</span></div>
-      <div>Star <span id="starText">0/6</span></div>
+      <div class="star-goal">Clear Star <span id="starText">0/3</span></div>
       <button id="soundButton" class="sound-button" type="button">Sound ON</button>
     </section>
 
@@ -35,10 +35,20 @@
     <section class="canvas-box">
       <canvas id="gameCanvas" width="900" height="560"></canvas>
 
-      <div id="startPanel" class="panel">
-        <h2>보스전 시작</h2>
-        <p>WASD 또는 방향키로 이동하세요.<br />탄막을 피하면서 별 3개 이상을 모아야 다음 웨이브로 넘어갑니다.<br />4번째 별부터는 별 1개당 +50 보너스 점수가 즉시 지급됩니다.<br />무한모드에서는 웨이브마다 별이 계속 추가로 등장하며, 랭킹 등록은 무한모드에서만 가능합니다.<br />각 챕터는 일반 웨이브 3개 + 보스 웨이브 1개로 구성됩니다. 4, 8, 12, 16, 20웨이브에서는 해당 챕터 패턴을 마무리하는 강화 보스전이 등장합니다.</p>
-        <button id="startButton" type="button">게임 시작</button>
+      <div id="startPanel" class="panel lobby-panel">
+        <p class="lobby-kicker">MODE SELECTED</p>
+        <h2 id="startTitle">무한모드 로비</h2>
+        <p id="lobbyModeText" class="lobby-story">
+          붉은 균열이 끝없이 열리고 있습니다.<br />
+          별을 모아 다음 파동을 버티고, 가능한 한 오래 살아남아 랭킹에 도전하세요.
+        </p>
+        <div class="rule-box">
+          <strong>클리어 조건</strong>
+          <span>웨이브 종료 전 별 3개 이상 획득</span>
+          <span>4번째 별부터 즉시 +50 보너스 점수</span>
+          <span>별은 일정 시간마다 1개씩 생성되며, 새 별이 나와도 기존 별은 사라지지 않습니다.</span>
+        </div>
+        <button id="startButton" type="button">시작하기</button>
       </div>
 
       <div id="upgradePanel" class="panel hidden">
@@ -64,7 +74,7 @@
           <ol id="rankingList" class="ranking-list"></ol>
         </div>
 
-        <button id="restartButton" type="button">다시 시작</button>
+        <button id="restartButton" type="button">로비로 돌아가기</button>
       </div>
     </section>
 

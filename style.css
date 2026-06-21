@@ -35,7 +35,7 @@ body {
 
 .hud {
   display: grid;
-  grid-template-columns: 0.8fr 0.9fr 2fr 0.8fr 0.9fr 0.8fr 1fr;
+  grid-template-columns: 0.8fr 0.9fr 1.3fr 0.8fr 0.9fr 1.1fr 1fr;
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -48,6 +48,64 @@ body {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.07);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.star-goal {
+  position: relative;
+  overflow: hidden;
+}
+
+.star-goal span {
+  color: #ffd166;
+  font-weight: 900;
+}
+
+.star-goal::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0%;
+  height: 3px;
+  background: #ffd166;
+  transition: width 0.2s ease;
+}
+
+.star-goal.star-complete {
+  border-color: rgba(255, 209, 102, 0.85);
+  background: rgba(255, 209, 102, 0.14);
+}
+
+.star-goal.star-complete::after {
+  width: 100%;
+}
+
+.mode-select {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.mode-button {
+  min-height: 62px;
+  padding: 10px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+}
+
+.mode-button span {
+  display: inline-block;
+  margin-top: 4px;
+  color: #cfd4ef;
+  font-size: 12px;
+}
+
+.mode-button.active {
+  border-color: rgba(255, 209, 102, 0.75);
+  background: linear-gradient(135deg, rgba(155, 27, 48, 0.95), rgba(255, 209, 102, 0.2));
 }
 
 .canvas-box {
@@ -78,7 +136,7 @@ canvas {
   gap: 16px;
   padding: 28px;
   text-align: center;
-  background: rgba(4, 6, 15, 0.82);
+  background: rgba(4, 6, 15, 0.84);
   backdrop-filter: blur(8px);
   overflow-y: auto;
 }
@@ -92,6 +150,39 @@ canvas {
   margin: 0;
   line-height: 1.6;
   color: #d8dcf5;
+}
+
+.lobby-panel {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 40, 80, 0.22), transparent 35%),
+    rgba(4, 6, 15, 0.86);
+}
+
+.lobby-kicker {
+  color: #ffd166 !important;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 3px;
+}
+
+.lobby-story {
+  max-width: 690px;
+}
+
+.rule-box {
+  display: grid;
+  gap: 8px;
+  width: min(640px, 92%);
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  border-radius: 18px;
+  color: #e9edff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rule-box strong {
+  color: #ffd166;
+  font-size: 18px;
 }
 
 button {
@@ -125,6 +216,8 @@ button:hover {
 }
 
 .upgrade-card {
+  position: relative;
+  z-index: 11;
   min-height: 150px;
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -219,11 +312,23 @@ button:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
-@media (max-width: 720px) {
+#difficultyText {
+  display: inline-block;
+  min-width: 72px;
+  color: #ffd166;
+}
+
+@media (max-width: 860px) {
   .hud {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .mode-select {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
   .upgrade-cards {
     grid-template-columns: 1fr;
   }
@@ -234,63 +339,5 @@ button:hover {
 
   .title-area h1 {
     font-size: 30px;
-  }
-}
-
-.upgrade-card {
-  position: relative;
-  z-index: 11;
-}
-
-
-#difficultyText {
-  display: inline-block;
-  min-width: 190px;
-  color: #ffd166;
-}
-
-.mode-select {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.mode-button {
-  min-height: 62px;
-  padding: 10px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 16px;
-  line-height: 1.25;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-}
-
-.mode-button span {
-  display: inline-block;
-  margin-top: 3px;
-  color: #cfd4ef;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.mode-button.active {
-  outline: 2px solid rgba(255, 209, 102, 0.9);
-  background: linear-gradient(135deg, rgba(255, 209, 102, 0.26), rgba(155, 27, 48, 0.72));
-}
-
-.mode-all {
-  background: linear-gradient(135deg, #9b1b30, #1a0b10);
-  box-shadow: 0 12px 26px rgba(255, 209, 102, 0.22);
-}
-
-#starText {
-  color: #ffd166;
-  font-weight: 800;
-}
-
-@media (max-width: 720px) {
-  .mode-select {
-    grid-template-columns: repeat(2, 1fr);
   }
 }

@@ -9,6 +9,8 @@ const scoreText = document.getElementById('scoreText');
 const difficultyText = document.getElementById('difficultyText');
 const starText = document.getElementById('starText');
 const modeButtons = document.querySelectorAll('.mode-button');
+const startTitle = document.getElementById('startTitle');
+const lobbyModeText = document.getElementById('lobbyModeText');
 
 const startPanel = document.getElementById('startPanel');
 const upgradePanel = document.getElementById('upgradePanel');
@@ -22,16 +24,14 @@ const resultText = document.getElementById('resultText');
 const rankForm = document.getElementById('rankForm');
 const nicknameInput = document.getElementById('nicknameInput');
 const rankingList = document.getElementById('rankingList');
-const rankingBox = document.querySelector('.ranking-box');
 
 const keys = {};
 const FINAL_WAVE = 20;
 const RANKING_KEY = 'rogueBossPlayLogs';
 const STAR_GOAL = 3;
 const MAX_STARS_PER_WAVE = 6;
-const INFINITE_WAVE_END = Infinity;
-const INFINITE_STAR_SPAWN_INTERVAL = 2.2;
 const STAR_BONUS_SCORE = 50;
+const STAR_SPAWN_INTERVAL = 3.2;
 
 let gameState = 'ready';
 let lastTime = 0;
@@ -39,12 +39,14 @@ let bulletTimer = 0;
 let specialTimer = 0;
 let waveTimer = 0;
 let scoreTimer = 0;
+let starTimer = 0;
 let animationId = null;
 let rankSavedThisRun = false;
 let lastResultIsWin = false;
-let selectedMode = { label: '무한모드', startWave: 1, endWave: INFINITE_WAVE_END, infinite: true };
-let currentRunStartWave = 1;
-let currentRunEndWave = FINAL_WAVE;
+let selectedMode = { label: '무한모드', startWave: 1, endWave: null, infinite: true };
+let currentRunEndWave = null;
+let currentRunIsInfinite = true;
+let currentRunLabel = '무한모드';
 
 const player = {
   x: canvas.width / 2,
@@ -74,7 +76,7 @@ let fireInterval = 1.1;
 let bulletSpeed = 145;
 let bulletCount = 8;
 let collectedStars = 0;
-let starSpawnTimer = 0;
+let spawnedStarsThisWave = 0;
 
 const upgrades = [
   {
@@ -227,11 +229,11 @@ function getDifficultyInfo(targetWave = wave) {
   const bossWave = isBossWave(targetWave);
 
   const stageData = {
-    1: { name: '1단계: 기본 탄막', pattern: '기본 탄막', color: '#74f0ff', waveDuration: 18, speedBonus: 0, countBonus: 0, intervalBonus: 0 },
-    2: { name: '2단계: 추격/회전 탄막', pattern: '추격 + 회전', color: '#ffd166', waveDuration: 19, speedBonus: 24, countBonus: 2, intervalBonus: -0.08 },
-    3: { name: '3단계: 혼합 + 장판', pattern: '혼합 + 경고 장판', color: '#ff9f1c', waveDuration: 20, speedBonus: 48, countBonus: 4, intervalBonus: -0.16 },
-    4: { name: '4단계: 폭죽 탄막', pattern: '폭죽 2차 탄막', color: '#ff4d6d', waveDuration: 21, speedBonus: 72, countBonus: 5, intervalBonus: -0.24 },
-    5: { name: '5단계: 레이저 지옥', pattern: '가로/세로 레이저', color: '#ff1b1c', waveDuration: 23, speedBonus: 96, countBonus: 6, intervalBonus: -0.32 },
+    1: { name: '1단계', pattern: '기본 탄막', color: '#74f0ff', waveDuration: 18, speedBonus: 0, countBonus: 0, intervalBonus: 0 },
+    2: { name: '2단계', pattern: '추격 + 회전', color: '#ffd166', waveDuration: 19, speedBonus: 24, countBonus: 2, intervalBonus: -0.08 },
+    3: { name: '3단계', pattern: '혼합 + 경고 장판', color: '#ff9f1c', waveDuration: 20, speedBonus: 48, countBonus: 4, intervalBonus: -0.16 },
+    4: { name: '4단계', pattern: '폭죽 2차 탄막', color: '#ff4d6d', waveDuration: 21, speedBonus: 72, countBonus: 5, intervalBonus: -0.24 },
+    5: { name: '5단계', pattern: '가로/세로 레이저', color: '#ff1b1c', waveDuration: 23, speedBonus: 96, countBonus: 6, intervalBonus: -0.32 },
   };
 
   return {
@@ -247,11 +249,7 @@ function isEliteWave(targetWave = wave) {
   return isBossWave(targetWave);
 }
 
-function isInfiniteMode() {
-  return selectedMode.infinite === true || currentRunEndWave === INFINITE_WAVE_END;
-}
-
-function resetGame(startWave = selectedMode.startWave, endWave = selectedMode.endWave) {
+function resetGame(startWave = selectedMode.startWave, endWave = selectedMode.endWave, infinite = selectedMode.infinite) {
   player.x = canvas.width / 2;
   player.y = canvas.height - 80;
   player.radius = 14;
@@ -266,22 +264,23 @@ function resetGame(startWave = selectedMode.startWave, endWave = selectedMode.en
   dangerZones = [];
   stars = [];
   floatingTexts = [];
-  currentRunStartWave = startWave;
-  currentRunEndWave = endWave;
   wave = startWave;
   score = 0;
-  collectedStars = 0;
-  starSpawnTimer = 0;
   bulletTimer = 0;
   specialTimer = 0;
   scoreTimer = 0;
+  starTimer = 0;
+  collectedStars = 0;
+  spawnedStarsThisWave = 0;
   rankSavedThisRun = false;
   lastResultIsWin = false;
-  finalWaveText.textContent = isInfiniteMode() ? '∞' : currentRunEndWave;
+  currentRunEndWave = infinite ? null : endWave;
+  currentRunIsInfinite = Boolean(infinite);
+  currentRunLabel = selectedMode.label;
+  finalWaveText.textContent = infinite ? '∞' : endWave;
   setWaveStats();
   updateHud();
 }
-
 function setWaveStats() {
   const difficulty = getDifficultyInfo(wave);
   const stage = difficulty.stage;
@@ -295,20 +294,22 @@ function setWaveStats() {
   waveTimer = waveDuration;
   bulletTimer = 0;
   specialTimer = difficulty.stage >= 3 ? 1.6 : 999;
-  spawnStars();
+  starTimer = 0;
+  collectedStars = 0;
+  spawnedStarsThisWave = 0;
+  stars = [];
+  floatingTexts = [];
+  spawnStar();
 }
 
-function startGame(mode = selectedMode) {
-  selectedMode = mode;
-  setActiveModeButton();
+function startGame() {
   resumeAudio();
-  resetGame(mode.startWave, mode.endWave);
+  resetGame();
   gameState = 'playing';
   startPanel.classList.add('hidden');
   upgradePanel.classList.add('hidden');
   gameOverPanel.classList.add('hidden');
   rankForm.classList.add('hidden');
-  if (rankingBox) rankingBox.classList.add('hidden');
   lastTime = performance.now();
   cancelAnimationFrame(animationId);
   startAmbience();
@@ -322,7 +323,7 @@ function nextWave() {
   stars = [];
   floatingTexts = [];
 
-  if (!isInfiniteMode() && wave >= currentRunEndWave) {
+  if (!currentRunIsInfinite && wave >= currentRunEndWave) {
     endGame(true);
     return;
   }
@@ -331,7 +332,6 @@ function nextWave() {
   playStageClearSound();
   showUpgradePanel();
 }
-
 function applyWaveDifficulty() {
   wave += 1;
   setWaveStats();
@@ -543,93 +543,12 @@ function createBullet(angle, speed) {
   });
 }
 
-
-function createStar() {
-  const safeDistanceFromBoss = boss.radius + 80;
-  const safeDistanceBetweenStars = 38;
-  let attempts = 0;
-
-  while (attempts < 120) {
-    attempts += 1;
-    const x = 42 + Math.random() * (canvas.width - 84);
-    const y = 135 + Math.random() * (canvas.height - 180);
-    const bossDistance = Math.hypot(x - boss.x, y - boss.y);
-    const overlapsStar = stars.some((star) => Math.hypot(x - star.x, y - star.y) < safeDistanceBetweenStars);
-
-    if (bossDistance > safeDistanceFromBoss && !overlapsStar) {
-      stars.push({ x, y, radius: 13, pulse: Math.random() * Math.PI * 2 });
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function spawnStars() {
-  stars = [];
-  collectedStars = 0;
-  starSpawnTimer = 0;
-
-  const startStarCount = isInfiniteMode() ? MAX_STARS_PER_WAVE : MAX_STARS_PER_WAVE;
-  for (let i = 0; i < startStarCount; i++) createStar();
-}
-
-function updateInfiniteStarSpawn(dt) {
-  if (!isInfiniteMode()) return;
-
-  starSpawnTimer += dt;
-  if (starSpawnTimer >= INFINITE_STAR_SPAWN_INTERVAL) {
-    starSpawnTimer = 0;
-    createStar();
-  }
-}
-
-function updateStars(dt) {
-  stars.forEach((star) => {
-    star.pulse += dt * 5;
-  });
-}
-
-function updateFloatingTexts(dt) {
-  floatingTexts.forEach((text) => {
-    text.y -= 45 * dt;
-    text.life -= dt;
-  });
-  floatingTexts = floatingTexts.filter((text) => text.life > 0);
-}
-
-function collectStar(star) {
-  collectedStars += 1;
-  stars = stars.filter((item) => item !== star);
-  playStarSound();
-
-  if (collectedStars > STAR_GOAL) {
-    score += STAR_BONUS_SCORE;
-    floatingTexts.push({
-      text: `+${STAR_BONUS_SCORE}`,
-      x: star.x,
-      y: star.y - 18,
-      life: 0.85,
-      color: '#ffd166',
-    });
-  } else {
-    floatingTexts.push({
-      text: `★ ${collectedStars}/${STAR_GOAL}`,
-      x: star.x,
-      y: star.y - 18,
-      life: 0.65,
-      color: '#fff2a8',
-    });
-  }
-}
-
 function update(dt) {
   updatePlayer(dt);
   updateBullets(dt);
   updateLasers(dt);
   updateDangerZones(dt);
   updateStars(dt);
-  updateInfiniteStarSpawn(dt);
   updateFloatingTexts(dt);
   checkCollisions();
 
@@ -637,6 +556,7 @@ function update(dt) {
   specialTimer += dt;
   waveTimer -= dt;
   scoreTimer += dt;
+  starTimer += dt;
 
   if (bulletTimer >= fireInterval) {
     bulletTimer = 0;
@@ -653,11 +573,16 @@ function update(dt) {
     score += 1;
   }
 
+  if (starTimer >= STAR_SPAWN_INTERVAL) {
+    starTimer = 0;
+    spawnStar();
+  }
+
   if (player.invincible > 0) player.invincible -= dt;
 
   if (waveTimer <= 0) {
     if (collectedStars < STAR_GOAL) {
-      endGame(false, `별 ${STAR_GOAL}개 이상을 모아야 다음 웨이브로 넘어갈 수 있어요. 이번 웨이브 수집: ${collectedStars}개`);
+      endGame(false);
       return;
     }
 
@@ -741,14 +666,61 @@ function updateDangerZones(dt) {
   dangerZones = dangerZones.filter((zone) => zone.total > 0 && zone.active > -0.05);
 }
 
-function checkCollisions() {
+
+function spawnStar() {
+  if (!currentRunIsInfinite && spawnedStarsThisWave >= MAX_STARS_PER_WAVE) return;
+
+  const margin = 38;
+  const minY = 145;
+  const star = {
+    x: margin + Math.random() * (canvas.width - margin * 2),
+    y: minY + Math.random() * (canvas.height - minY - margin),
+    radius: 11,
+    pulse: Math.random() * Math.PI * 2,
+  };
+
+  stars.push(star);
+  spawnedStarsThisWave += 1;
+}
+
+function updateStars(dt) {
+  stars.forEach((star) => {
+    star.pulse += dt * 4;
+  });
+}
+
+function updateFloatingTexts(dt) {
+  floatingTexts.forEach((text) => {
+    text.y -= 42 * dt;
+    text.life -= dt;
+  });
+  floatingTexts = floatingTexts.filter((text) => text.life > 0);
+}
+
+function checkStarCollisions() {
   for (const star of stars) {
     const distance = Math.hypot(player.x - star.x, player.y - star.y);
     if (distance < player.radius + star.radius) {
-      collectStar(star);
+      collectedStars += 1;
+      stars = stars.filter((item) => item !== star);
+      playStarSound();
+
+      if (collectedStars > STAR_GOAL) {
+        score += STAR_BONUS_SCORE;
+        floatingTexts.push({
+          x: player.x + player.radius + 8,
+          y: player.y - player.radius - 6,
+          text: `+${STAR_BONUS_SCORE}`,
+          life: 0.8,
+        });
+      }
       return;
     }
   }
+}
+
+function checkCollisions() {
+  checkStarCollisions();
 
   if (player.invincible > 0) return;
 
@@ -798,8 +770,8 @@ function draw() {
   drawBoss();
   drawDangerZones();
   drawLasers();
-  drawStars();
   drawBullets();
+  drawStars();
   drawPlayer();
   drawFloatingTexts();
 }
@@ -854,7 +826,7 @@ function drawBoss() {
   ctx.fillStyle = difficulty.color;
   ctx.font = 'bold 18px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(`${difficulty.bossName} / ${difficulty.pattern}`, boss.x, boss.y - 78);
+  ctx.fillText(difficulty.bossName, boss.x, boss.y - 78);
 }
 
 function drawPlayer() {
@@ -877,6 +849,43 @@ function drawBullets() {
     ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
     ctx.fillStyle = bullet.color || '#ffd166';
     ctx.fill();
+  });
+}
+
+
+function drawStars() {
+  stars.forEach((star) => {
+    const r = star.radius + Math.sin(star.pulse) * 1.8;
+    ctx.save();
+    ctx.translate(star.x, star.y);
+    ctx.rotate(star.pulse * 0.18);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const angle = -Math.PI / 2 + (Math.PI * 2 * i) / 10;
+      const radius = i % 2 === 0 ? r : r * 0.45;
+      ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#ffd166';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
+function drawFloatingTexts() {
+  floatingTexts.forEach((item) => {
+    ctx.globalAlpha = Math.max(0, item.life / 0.8);
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffd166';
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.lineWidth = 4;
+    ctx.strokeText(item.text, item.x, item.y);
+    ctx.fillText(item.text, item.x, item.y);
+    ctx.globalAlpha = 1;
   });
 }
 
@@ -921,92 +930,47 @@ function drawLasers() {
   });
 }
 
-
-function drawStarShape(x, y, outerRadius, innerRadius, points) {
-  ctx.beginPath();
-  for (let i = 0; i < points * 2; i++) {
-    const radius = i % 2 === 0 ? outerRadius : innerRadius;
-    const angle = -Math.PI / 2 + (Math.PI * i) / points;
-    const px = x + Math.cos(angle) * radius;
-    const py = y + Math.sin(angle) * radius;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-}
-
-function drawStars() {
-  stars.forEach((star) => {
-    const pulse = Math.sin(star.pulse) * 2;
-    ctx.save();
-    ctx.shadowColor = 'rgba(255, 209, 102, 0.75)';
-    ctx.shadowBlur = 14;
-    drawStarShape(star.x, star.y, star.radius + pulse, star.radius * 0.48, 5);
-    ctx.fillStyle = '#ffd166';
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-  });
-}
-
-function drawFloatingTexts() {
-  floatingTexts.forEach((item) => {
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, item.life / 0.85);
-    ctx.fillStyle = item.color;
-    ctx.font = 'bold 22px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(item.text, item.x, item.y);
-    ctx.restore();
-  });
-}
-
 function updateHud() {
   hpText.textContent = `${player.hp}/${player.maxHp}`;
   waveText.textContent = wave;
   timeText.textContent = Math.max(0, Math.ceil(waveTimer));
   scoreText.textContent = score;
-  if (starText) starText.textContent = isInfiniteMode() ? `${collectedStars}/∞` : `${collectedStars}/${MAX_STARS_PER_WAVE}`;
   const difficulty = getDifficultyInfo();
+  if (starText) {
+    starText.textContent = `${Math.min(collectedStars, STAR_GOAL)}/${STAR_GOAL}`;
+    starText.parentElement.classList.toggle('star-complete', collectedStars >= STAR_GOAL);
+  }
+
   if (difficultyText) {
     difficultyText.textContent = `${difficulty.name}${difficulty.isBoss ? ' / 보스전' : ''}`;
   }
 }
 
-function endGame(isWin, failReason = '') {
+function endGame(isWin) {
   gameState = 'over';
   cancelAnimationFrame(animationId);
   stopAmbience();
 
   lastResultIsWin = isWin;
-  resultTitle.textContent = isWin ? 'Ending Clear!' : 'Game Over';
-  const modeLabel = selectedMode.label || '무한모드';
-  const reasonText = failReason ? ` / 실패 사유: ${failReason}` : '';
-  const endWaveLabel = isInfiniteMode() ? '∞' : currentRunEndWave;
-  resultText.textContent = `모드: ${modeLabel} / 결과: ${isWin ? '클리어' : '게임오버'} / 도달 웨이브: ${wave}/${endWaveLabel} / 최종 점수: ${score}${reasonText}`;
+  const resultName = isWin ? (currentRunIsInfinite ? '무한모드 종료' : '챕터 클리어') : '게임오버';
+  resultTitle.textContent = resultName;
+  resultText.textContent = `모드: ${currentRunLabel} / 결과: ${resultName} / 도달 웨이브: ${wave}${currentRunIsInfinite ? '' : `/${currentRunEndWave}`} / 별: ${collectedStars}/${STAR_GOAL} / 최종 점수: ${score}`;
 
   if (isWin) playStageClearSound();
   else playStageFailSound();
 
   rankSavedThisRun = false;
-  nicknameInput.value = '';
-
-  if (isInfiniteMode()) {
+  if (currentRunIsInfinite) {
     rankForm.classList.remove('hidden');
-    if (rankingBox) rankingBox.classList.remove('hidden');
+    nicknameInput.value = '';
     setTimeout(() => nicknameInput.focus(), 100);
   } else {
     rankForm.classList.add('hidden');
-    if (rankingBox) rankingBox.classList.add('hidden');
   }
 
   renderRankings();
   gameOverPanel.classList.remove('hidden');
 }
-
 function getRankings() {
   const saved = localStorage.getItem(RANKING_KEY);
   if (!saved) return [];
@@ -1026,7 +990,6 @@ function saveRanking(nickname) {
     name: cleanName,
     score,
     wave,
-    mode: selectedMode.label || '무한모드',
     result: lastResultIsWin ? 'CLEAR' : 'FAIL',
     date: new Date().toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
   });
@@ -1051,8 +1014,8 @@ function renderRankings() {
 
   rankings.forEach((rank) => {
     const item = document.createElement('li');
-    const resultLabel = rank.result === 'CLEAR' ? '엔딩 클리어' : '게임오버';
-    item.innerHTML = `<strong>${rank.name}</strong> — ${rank.mode || '무한모드'} / ${resultLabel} / Wave ${rank.wave} <span class="rank-meta">/ ${rank.score}점 / ${rank.date}</span>`;
+    const resultLabel = rank.result === 'CLEAR' ? '클리어' : '게임오버';
+    item.innerHTML = `<strong>${rank.name}</strong> — ${resultLabel} / Wave ${rank.wave} <span class="rank-meta">/ ${rank.score}점 / ${rank.date}</span>`;
     rankingList.appendChild(item);
   });
 }
@@ -1068,39 +1031,67 @@ function gameLoop(currentTime) {
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
+
+function getModeFromButton(button) {
+  return {
+    label: button.dataset.label || '무한모드',
+    startWave: Number(button.dataset.start || 1),
+    endWave: button.dataset.infinite === 'true' ? null : Number(button.dataset.end || FINAL_WAVE),
+    infinite: button.dataset.infinite === 'true',
+  };
+}
+
+function showLobbyForMode(mode) {
+  selectedMode = mode;
+  gameState = 'ready';
+  cancelAnimationFrame(animationId);
+  stopAmbience();
+  bullets = [];
+  lasers = [];
+  dangerZones = [];
+  stars = [];
+  floatingTexts = [];
+  wave = mode.startWave;
+  currentRunEndWave = mode.infinite ? null : mode.endWave;
+  currentRunIsInfinite = mode.infinite;
+  currentRunLabel = mode.label;
+  finalWaveText.textContent = mode.infinite ? '∞' : mode.endWave;
+  setWaveStats();
+
+  if (startTitle) startTitle.textContent = `${mode.label} 로비`;
+  if (lobbyModeText) {
+    lobbyModeText.innerHTML = mode.infinite
+      ? '붉은 균열이 끝없이 열리고 있습니다.<br />별을 모아 다음 파동을 버티고, 가능한 한 오래 살아남아 랭킹에 도전하세요.'
+      : `이 구간은 Wave ${mode.startWave}~${mode.endWave} 패턴을 익히는 훈련 챕터입니다.<br />별 3개를 모아 웨이브를 통과하고, 보스전까지 흐름을 연습하세요.`;
+  }
+
+  startPanel.classList.remove('hidden');
+  upgradePanel.classList.add('hidden');
+  gameOverPanel.classList.add('hidden');
+  rankForm.classList.add('hidden');
+  updateHud();
+  draw();
+}
+
+modeButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    modeButtons.forEach((item) => item.classList.remove('active'));
+    button.classList.add('active');
+    playSelectSound();
+    showLobbyForMode(getModeFromButton(button));
+  });
+});
+
 window.addEventListener('keydown', (event) => { keys[event.key] = true; });
 window.addEventListener('keyup', (event) => { keys[event.key] = false; });
 
 function handleStartClick(event) {
   event.preventDefault();
-  startGame(selectedMode);
+  startGame();
 }
-
-
-function setActiveModeButton() {
-  modeButtons.forEach((button) => {
-    const buttonEndWave = button.dataset.infinite === 'true' ? INFINITE_WAVE_END : Number(button.dataset.end);
-    const isActive = Number(button.dataset.start) === selectedMode.startWave && buttonEndWave === selectedMode.endWave;
-    button.classList.toggle('active', isActive);
-  });
-}
-
-modeButtons.forEach((button) => {
-  button.addEventListener('mouseenter', playHoverSound);
-  button.addEventListener('focus', playHoverSound);
-  button.addEventListener('click', () => {
-    playSelectSound();
-    const mode = {
-      label: button.dataset.label,
-      startWave: Number(button.dataset.start),
-      endWave: button.dataset.infinite === 'true' ? INFINITE_WAVE_END : Number(button.dataset.end),
-      infinite: button.dataset.infinite === 'true',
-    };
-    startGame(mode);
-  });
-});
 
 startButton.addEventListener('click', handleStartClick);
+restartButton.addEventListener('click', () => showLobbyForMode(selectedMode));
 
 soundButton.addEventListener('click', () => {
   audio.enabled = !audio.enabled;
@@ -1120,8 +1111,8 @@ rankForm.addEventListener('submit', (event) => {
   renderRankings();
 });
 
-resetGame();
+const defaultModeButton = document.querySelector('.mode-button.active') || modeButtons[modeButtons.length - 1];
+if (defaultModeButton) selectedMode = getModeFromButton(defaultModeButton);
+showLobbyForMode(selectedMode);
 renderRankings();
 setSoundButtonText();
-setActiveModeButton();
-draw();

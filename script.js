@@ -22,7 +22,7 @@ const nicknameInput = document.getElementById('nicknameInput');
 const rankingList = document.getElementById('rankingList');
 
 const keys = {};
-const FINAL_WAVE = 15;
+const FINAL_WAVE = 20;
 const RANKING_KEY = 'rogueBossPlayLogs';
 
 let gameState = 'ready';
@@ -53,6 +53,7 @@ const boss = {
 
 let bullets = [];
 let lasers = [];
+let dangerZones = [];
 let wave = 1;
 let score = 0;
 let waveDuration = 20;
@@ -189,18 +190,42 @@ function stopAmbience() {
   }
 }
 
+function getStage(targetWave = wave) {
+  return Math.min(5, Math.ceil(targetWave / 4));
+}
+
+function getStageWave(targetWave = wave) {
+  return ((targetWave - 1) % 4) + 1;
+}
+
+function isBossWave(targetWave = wave) {
+  return getStageWave(targetWave) === 4;
+}
+
 function getDifficultyInfo(targetWave = wave) {
-  if (targetWave <= 5) {
-    return { name: '1단계: 악몽의 입구', level: 1, color: '#74f0ff', waveDuration: 20, intervalBonus: 0, speedBonus: 0, countBonus: 0 };
-  }
-  if (targetWave <= 10) {
-    return { name: '2단계: 심연의 추격', level: 2, color: '#ffd166', waveDuration: 23, intervalBonus: -0.16, speedBonus: 35, countBonus: 2 };
-  }
-  return { name: '3단계: 지옥의 난전', level: 3, color: '#ff4d6d', waveDuration: 26, intervalBonus: -0.28, speedBonus: 75, countBonus: 4 };
+  const stage = getStage(targetWave);
+  const stageWave = getStageWave(targetWave);
+  const bossWave = isBossWave(targetWave);
+
+  const stageData = {
+    1: { name: '1단계: 기본 탄막', pattern: '기본 탄막', color: '#74f0ff', waveDuration: 18, speedBonus: 0, countBonus: 0, intervalBonus: 0 },
+    2: { name: '2단계: 추격/회전 탄막', pattern: '추격 + 회전', color: '#ffd166', waveDuration: 19, speedBonus: 24, countBonus: 2, intervalBonus: -0.08 },
+    3: { name: '3단계: 혼합 + 장판', pattern: '혼합 + 경고 장판', color: '#ff9f1c', waveDuration: 20, speedBonus: 48, countBonus: 4, intervalBonus: -0.16 },
+    4: { name: '4단계: 폭죽 탄막', pattern: '폭죽 2차 탄막', color: '#ff4d6d', waveDuration: 21, speedBonus: 72, countBonus: 5, intervalBonus: -0.24 },
+    5: { name: '5단계: 레이저 지옥', pattern: '가로/세로 레이저', color: '#ff1b1c', waveDuration: 23, speedBonus: 96, countBonus: 6, intervalBonus: -0.32 },
+  };
+
+  return {
+    ...stageData[stage],
+    stage,
+    stageWave,
+    isBoss: bossWave,
+    bossName: bossWave ? `CHAPTER ${stage} BOSS` : `Chapter ${stage}-${stageWave}`,
+  };
 }
 
 function isEliteWave(targetWave = wave) {
-  return targetWave % 5 === 0;
+  return isBossWave(targetWave);
 }
 
 function resetGame() {
@@ -215,6 +240,7 @@ function resetGame() {
 
   bullets = [];
   lasers = [];
+  dangerZones = [];
   wave = 1;
   score = 0;
   bulletTimer = 0;
@@ -229,13 +255,17 @@ function resetGame() {
 
 function setWaveStats() {
   const difficulty = getDifficultyInfo(wave);
-  waveDuration = difficulty.waveDuration + Math.floor((wave - 1) / 2);
-  fireInterval = Math.max(0.28, 1.1 - (wave - 1) * 0.055 + difficulty.intervalBonus);
-  bulletSpeed = 145 + (wave - 1) * 13 + difficulty.speedBonus;
-  bulletCount = Math.min(28, 8 + Math.floor(wave * 0.9) + difficulty.countBonus);
+  const stage = difficulty.stage;
+  const stageWave = difficulty.stageWave;
+  const bossBonus = difficulty.isBoss ? 1 : 0;
+
+  waveDuration = difficulty.waveDuration + bossBonus * 7;
+  fireInterval = Math.max(0.26, 1.05 - stage * 0.08 - stageWave * 0.035 + difficulty.intervalBonus - bossBonus * 0.12);
+  bulletSpeed = 135 + stage * 24 + stageWave * 8 + difficulty.speedBonus + bossBonus * 24;
+  bulletCount = Math.min(30, 7 + stage * 2 + stageWave + difficulty.countBonus + bossBonus * 5);
   waveTimer = waveDuration;
   bulletTimer = 0;
-  specialTimer = isEliteWave(wave) ? 2.2 : 999;
+  specialTimer = difficulty.stage >= 3 ? 1.6 : 999;
 }
 
 function startGame() {
@@ -255,6 +285,7 @@ function startGame() {
 function nextWave() {
   bullets = [];
   lasers = [];
+  dangerZones = [];
 
   if (wave >= FINAL_WAVE) {
     endGame(true);
@@ -299,36 +330,101 @@ function showUpgradePanel() {
 }
 
 function spawnPattern() {
-  if (isEliteWave(wave)) {
-    Math.random() > 0.45 ? spawnSpiralBullets() : spawnAimedBullets();
+  const info = getDifficultyInfo();
+
+  if (info.stage === 1) {
+    spawnCircleBullets(info.isBoss ? 1.25 : 1);
     return;
   }
 
-  if (wave % 3 === 0) spawnSpiralBullets();
-  else if (wave % 2 === 0) spawnAimedBullets();
-  else spawnCircleBullets();
-}
+  if (info.stage === 2) {
+    if (info.isBoss) {
+      spawnAimedBullets(1.2);
+      setTimeout(() => spawnSpiralBullets(1.1), 220);
+    } else {
+      Math.random() > 0.5 ? spawnAimedBullets() : spawnSpiralBullets();
+    }
+    return;
+  }
 
-function spawnElitePattern() {
-  if (!isEliteWave(wave)) return;
-  playSpecialWarningSound();
+  if (info.stage === 3) {
+    const roll = Math.random();
+    if (roll < 0.34) spawnCircleBullets();
+    else if (roll < 0.67) spawnAimedBullets();
+    else spawnSpiralBullets();
+    if (info.isBoss && Math.random() < 0.5) spawnDangerZoneAttack();
+    return;
+  }
 
-  if (Math.random() > 0.5) spawnLaserAttack();
+  if (info.stage === 4) {
+    if (info.isBoss) {
+      spawnFireworkAttack(1.35);
+      setTimeout(() => spawnCircleBullets(0.8), 260);
+    } else {
+      Math.random() < 0.55 ? spawnFireworkAttack() : spawnAimedBullets();
+    }
+    return;
+  }
+
+  // 5단계: 최종 챕터. 레이저와 기존 패턴을 모두 섞어서 사용
+  const roll = Math.random();
+  if (roll < 0.24) spawnCircleBullets();
+  else if (roll < 0.48) spawnAimedBullets();
+  else if (roll < 0.72) spawnSpiralBullets();
   else spawnFireworkAttack();
 }
 
-function spawnCircleBullets() {
+function spawnElitePattern() {
+  const info = getDifficultyInfo();
+  playSpecialWarningSound();
+
+  // 각 챕터 보스전은 해당 단계의 패턴을 마무리하는 강화 패턴을 사용
+  if (info.isBoss && info.stage === 1) {
+    spawnCircleBullets(1.45);
+    setTimeout(() => spawnCircleBullets(0.9), 300);
+    return;
+  }
+
+  if (info.isBoss && info.stage === 2) {
+    spawnAimedBullets(1.35);
+    setTimeout(() => spawnSpiralBullets(1.25), 260);
+    return;
+  }
+
+  if (info.stage === 3) {
+    spawnDangerZoneAttack(info.isBoss ? 1.35 : 1);
+    if (info.isBoss) setTimeout(() => spawnAimedBullets(1.05), 300);
+    return;
+  }
+
+  if (info.stage === 4) {
+    spawnFireworkAttack(info.isBoss ? 1.45 : 1);
+    if (info.isBoss) setTimeout(() => spawnFireworkAttack(1.05), 420);
+    return;
+  }
+
+  if (info.stage === 5) {
+    spawnLaserAttack(info.isBoss ? 1.35 : 1);
+    if (info.isBoss) {
+      setTimeout(() => spawnFireworkAttack(1.1), 350);
+      setTimeout(() => spawnDangerZoneAttack(1.1), 700);
+    }
+  }
+}
+
+function spawnCircleBullets(multiplier = 1) {
   const angleOffset = Math.random() * Math.PI * 2;
-  for (let i = 0; i < bulletCount; i++) {
-    const angle = angleOffset + (Math.PI * 2 * i) / bulletCount;
+  const count = Math.floor(bulletCount * multiplier);
+  for (let i = 0; i < count; i++) {
+    const angle = angleOffset + (Math.PI * 2 * i) / count;
     createBullet(angle, bulletSpeed);
   }
 }
 
-function spawnAimedBullets() {
+function spawnAimedBullets(multiplier = 1) {
   const baseAngle = Math.atan2(player.y - boss.y, player.x - boss.x);
-  const spread = 0.5 + getDifficultyInfo().level * 0.12;
-  const count = Math.min(12, 3 + Math.floor(wave / 2));
+  const spread = 0.5 + getDifficultyInfo().stage * 0.12;
+  const count = Math.min(16, Math.floor((3 + Math.floor(wave / 2)) * multiplier));
 
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0 : i / (count - 1);
@@ -337,9 +433,9 @@ function spawnAimedBullets() {
   }
 }
 
-function spawnSpiralBullets() {
-  const baseAngle = performance.now() / (620 - getDifficultyInfo().level * 90);
-  const count = Math.min(18, bulletCount);
+function spawnSpiralBullets(multiplier = 1) {
+  const baseAngle = performance.now() / (620 - getDifficultyInfo().stage * 90);
+  const count = Math.min(24, Math.floor(bulletCount * multiplier));
 
   for (let i = 0; i < count; i++) {
     const angle = baseAngle + (Math.PI * 2 * i) / count;
@@ -347,23 +443,28 @@ function spawnSpiralBullets() {
   }
 }
 
-function spawnLaserAttack() {
-  const laserCount = getDifficultyInfo().level === 3 ? 3 : 2;
+function spawnLaserAttack(multiplier = 1) {
+  const difficulty = getDifficultyInfo();
+  const laserCount = Math.floor((2 + Math.floor(Math.random() * 2)) * multiplier);
+
   for (let i = 0; i < laserCount; i++) {
-    const x = 90 + Math.random() * (canvas.width - 180);
+    const isVertical = Math.random() > 0.5;
     lasers.push({
-      x,
-      width: 18 + getDifficultyInfo().level * 5,
-      warning: 0.75,
-      active: 0.42,
-      total: 1.17,
+      orientation: isVertical ? 'vertical' : 'horizontal',
+      x: 80 + Math.random() * (canvas.width - 160),
+      y: 80 + Math.random() * (canvas.height - 160),
+      width: 16 + difficulty.stage * 4,
+      warning: 0.8,
+      active: 0.46,
+      total: 1.26,
       hit: false,
     });
   }
 }
 
-function spawnFireworkAttack() {
-  const count = getDifficultyInfo().level === 3 ? 4 : 3;
+function spawnFireworkAttack(multiplier = 1) {
+  const info = getDifficultyInfo();
+  const count = Math.floor((info.stage >= 5 ? 5 : 4) * multiplier);
   for (let i = 0; i < count; i++) {
     const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.3;
     bullets.push({
@@ -374,7 +475,24 @@ function spawnFireworkAttack() {
       radius: 9,
       color: '#ff7a1a',
       splitTime: 0.55 + Math.random() * 0.35,
-      splitCount: 8 + getDifficultyInfo().level * 3,
+      splitCount: 8 + info.stage * 3 + (info.isBoss ? 4 : 0),
+    });
+  }
+}
+
+function spawnDangerZoneAttack(multiplier = 1) {
+  const info = getDifficultyInfo();
+  const zoneCount = Math.floor((2 + Math.floor(info.stage / 2) + (info.isBoss ? 2 : 0)) * multiplier);
+
+  for (let i = 0; i < zoneCount; i++) {
+    dangerZones.push({
+      x: 90 + Math.random() * (canvas.width - 180),
+      y: 150 + Math.random() * (canvas.height - 210),
+      radius: 34 + info.stage * 5 + (info.isBoss ? 10 : 0),
+      warning: 0.95,
+      active: 0.28,
+      total: 1.23,
+      hit: false,
     });
   }
 }
@@ -394,6 +512,7 @@ function update(dt) {
   updatePlayer(dt);
   updateBullets(dt);
   updateLasers(dt);
+  updateDangerZones(dt);
   checkCollisions();
 
   bulletTimer += dt;
@@ -406,7 +525,7 @@ function update(dt) {
     spawnPattern();
   }
 
-  if (specialTimer >= 4.4 && isEliteWave(wave)) {
+  if (specialTimer >= (isBossWave(wave) ? 3.2 : 4.6) && getDifficultyInfo().stage >= 3) {
     specialTimer = 0;
     spawnElitePattern();
   }
@@ -420,7 +539,7 @@ function update(dt) {
 
   if (waveTimer <= 0) {
     score += wave * 25;
-    if (isEliteWave(wave)) score += 100;
+    if (isBossWave(wave)) score += 150;
     nextWave();
   }
 
@@ -489,6 +608,16 @@ function updateLasers(dt) {
   lasers = lasers.filter((laser) => laser.total > 0 && laser.active > -0.05);
 }
 
+function updateDangerZones(dt) {
+  dangerZones.forEach((zone) => {
+    zone.total -= dt;
+    if (zone.warning > 0) zone.warning -= dt;
+    else zone.active -= dt;
+  });
+
+  dangerZones = dangerZones.filter((zone) => zone.total > 0 && zone.active > -0.05);
+}
+
 function checkCollisions() {
   if (player.invincible > 0) return;
 
@@ -503,9 +632,22 @@ function checkCollisions() {
 
   for (const laser of lasers) {
     const activeLaser = laser.warning <= 0 && laser.active > 0;
-    const withinX = Math.abs(player.x - laser.x) < player.radius + laser.width / 2;
-    if (activeLaser && withinX && !laser.hit) {
+    const withinBeam = laser.orientation === 'horizontal'
+      ? Math.abs(player.y - laser.y) < player.radius + laser.width / 2
+      : Math.abs(player.x - laser.x) < player.radius + laser.width / 2;
+
+    if (activeLaser && withinBeam && !laser.hit) {
       laser.hit = true;
+      damagePlayer();
+      return;
+    }
+  }
+
+  for (const zone of dangerZones) {
+    const activeZone = zone.warning <= 0 && zone.active > 0;
+    const distance = Math.hypot(player.x - zone.x, player.y - zone.y);
+    if (activeZone && distance < player.radius + zone.radius && !zone.hit) {
+      zone.hit = true;
       damagePlayer();
       return;
     }
@@ -523,6 +665,7 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawArena();
   drawBoss();
+  drawDangerZones();
   drawLasers();
   drawBullets();
   drawPlayer();
@@ -539,7 +682,7 @@ function drawArena() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
   }
 
-  if (isEliteWave()) {
+  if (isBossWave()) {
     ctx.fillStyle = 'rgba(255, 40, 40, 0.08)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
@@ -558,7 +701,7 @@ function drawBoss() {
 
   ctx.fillStyle = isEliteWave() ? 'rgba(255, 0, 50, 0.25)' : 'rgba(255, 0, 50, 0.14)';
   ctx.beginPath();
-  ctx.arc(x, y + 6, 72 + pulse * 3 + difficulty.level * 3, 0, Math.PI * 2);
+  ctx.arc(x, y + 6, 72 + pulse * 3 + difficulty.stage * 3, 0, Math.PI * 2);
   ctx.fill();
 
   drawPixelRect(x - 56, y - 42, 20, 18, '#1a0508');
@@ -578,7 +721,7 @@ function drawBoss() {
   ctx.fillStyle = difficulty.color;
   ctx.font = 'bold 18px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(`${isEliteWave() ? 'ELITE ' : ''}DEMON Lv.${wave}`, boss.x, boss.y - 78);
+  ctx.fillText(`${difficulty.bossName} / ${difficulty.pattern}`, boss.x, boss.y - 78);
 }
 
 function drawPlayer() {
@@ -604,14 +747,44 @@ function drawBullets() {
   });
 }
 
+function drawDangerZones() {
+  dangerZones.forEach((zone) => {
+    const activeZone = zone.warning <= 0 && zone.active > 0;
+    ctx.beginPath();
+    ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
+    ctx.fillStyle = activeZone ? 'rgba(255, 90, 0, 0.46)' : 'rgba(255, 40, 40, 0.18)';
+    ctx.fill();
+    ctx.strokeStyle = activeZone ? 'rgba(255, 240, 120, 0.9)' : 'rgba(255, 90, 90, 0.7)';
+    ctx.lineWidth = activeZone ? 4 : 2;
+    ctx.stroke();
+
+    if (!activeZone) {
+      ctx.beginPath();
+      ctx.moveTo(zone.x - zone.radius * 0.6, zone.y);
+      ctx.lineTo(zone.x + zone.radius * 0.6, zone.y);
+      ctx.moveTo(zone.x, zone.y - zone.radius * 0.6);
+      ctx.lineTo(zone.x, zone.y + zone.radius * 0.6);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  });
+}
+
 function drawLasers() {
   lasers.forEach((laser) => {
     const activeLaser = laser.warning <= 0 && laser.active > 0;
     ctx.fillStyle = activeLaser ? 'rgba(255, 20, 20, 0.72)' : 'rgba(255, 255, 255, 0.22)';
-    ctx.fillRect(laser.x - laser.width / 2, 0, laser.width, canvas.height);
 
-    ctx.fillStyle = activeLaser ? 'rgba(255, 240, 160, 0.85)' : 'rgba(255, 60, 60, 0.25)';
-    ctx.fillRect(laser.x - 2, 0, 4, canvas.height);
+    if (laser.orientation === 'horizontal') {
+      ctx.fillRect(0, laser.y - laser.width / 2, canvas.width, laser.width);
+      ctx.fillStyle = activeLaser ? 'rgba(255, 240, 160, 0.85)' : 'rgba(255, 60, 60, 0.25)';
+      ctx.fillRect(0, laser.y - 2, canvas.width, 4);
+    } else {
+      ctx.fillRect(laser.x - laser.width / 2, 0, laser.width, canvas.height);
+      ctx.fillStyle = activeLaser ? 'rgba(255, 240, 160, 0.85)' : 'rgba(255, 60, 60, 0.25)';
+      ctx.fillRect(laser.x - 2, 0, 4, canvas.height);
+    }
   });
 }
 
@@ -622,7 +795,7 @@ function updateHud() {
   scoreText.textContent = score;
   const difficulty = getDifficultyInfo();
   if (difficultyText) {
-    difficultyText.textContent = `${difficulty.name}${isEliteWave() ? ' / 고난도 보스' : ''}`;
+    difficultyText.textContent = `${difficulty.name}${difficulty.isBoss ? ' / 보스전' : ''}`;
   }
 }
 

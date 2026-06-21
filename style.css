@@ -93,7 +93,7 @@ button:hover { transform: translateY(-2px); }
   cursor: pointer;
   background: rgba(70, 12, 16, 0.64);
 }
-.upgrade-card:hover { transform: translateY(-4px); background: rgba(110, 20, 24, 0.72); }
+.upgrade-card:hover, .upgrade-card:focus { transform: translateY(-4px); background: rgba(110, 20, 24, 0.72); outline: 1px solid rgba(255, 210, 120, 0.65); }
 .upgrade-card h3 { margin: 0 0 10px; }
 .upgrade-card p { color: #edcfcf; }
 

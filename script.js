@@ -21,7 +21,6 @@ let lastTime = 0;
 let bulletTimer = 0;
 let waveTimer = 0;
 let scoreTimer = 0;
-let ambienceTimer = 0;
 let animationId = null;
 
 const player = {
@@ -46,14 +45,21 @@ let bulletCount = 8;
 const audio = {
   ctx: null,
   masterGain: null,
+  musicGain: null,
   enabled: true,
+  musicPlaying: false,
+  musicIntervalId: null,
+  musicStep: 0,
 };
 
 function setupAudio() {
   if (audio.ctx) return;
   audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
   audio.masterGain = audio.ctx.createGain();
-  audio.masterGain.gain.value = audio.enabled ? 0.7 : 0;
+  audio.musicGain = audio.ctx.createGain();
+  audio.masterGain.gain.value = audio.enabled ? 0.72 : 0;
+  audio.musicGain.gain.value = 0.26;
+  audio.musicGain.connect(audio.masterGain);
   audio.masterGain.connect(audio.ctx.destination);
 }
 
@@ -69,11 +75,16 @@ function setSoundEnabled(enabled) {
   if (audio.masterGain) {
     const now = audio.ctx.currentTime;
     audio.masterGain.gain.cancelScheduledValues(now);
-    audio.masterGain.gain.setTargetAtTime(enabled ? 0.7 : 0, now, 0.04);
+    audio.masterGain.gain.setTargetAtTime(enabled ? 0.72 : 0, now, 0.04);
   }
+  if (enabled && gameState === 'playing') startHauntedMusicLoop();
 }
 
-function playTone({ frequency, type = 'square', start = 0, duration = 0.2, volume = 0.12, detuneEnd = null }) {
+function connectToMaster(node, isMusic = false) {
+  node.connect(isMusic ? audio.musicGain : audio.masterGain);
+}
+
+function playTone({ frequency, type = 'square', start = 0, duration = 0.2, volume = 0.12, detuneEnd = null, isMusic = false }) {
   if (!audio.enabled) return;
   resumeAudio();
   const now = audio.ctx.currentTime + start;
@@ -81,35 +92,90 @@ function playTone({ frequency, type = 'square', start = 0, duration = 0.2, volum
   const gain = audio.ctx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(frequency, now);
-  if (detuneEnd) osc.frequency.exponentialRampToValueAtTime(detuneEnd, now + duration);
+  if (detuneEnd) osc.frequency.exponentialRampToValueAtTime(Math.max(20, detuneEnd), now + duration);
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(volume, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.025);
+  gain.gain.setValueAtTime(volume * 0.72, Math.max(now + 0.03, now + duration * 0.68));
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
   osc.connect(gain);
-  gain.connect(audio.masterGain);
+  connectToMaster(gain, isMusic);
   osc.start(now);
-  osc.stop(now + duration + 0.02);
+  osc.stop(now + duration + 0.04);
 }
 
-function playGhostAmbience() {
-  if (!audio.enabled || gameState !== 'playing') return;
-  // 지속 노이즈 대신 귀신의집 느낌의 짧은 픽셀 멜로디 이벤트
-  const patterns = [
-    [392, 370, 330, 294],
-    [523, 494, 392, 311],
-    [330, 247, 262, 196],
-  ];
-  const notes = patterns[Math.floor(Math.random() * patterns.length)];
-  notes.forEach((note, i) => {
-    playTone({ frequency: note, type: i % 2 ? 'triangle' : 'square', start: i * 0.18, duration: 0.32, volume: 0.055, detuneEnd: Math.max(80, note * 0.82) });
-  });
-  playTone({ frequency: 98, type: 'triangle', start: 0.05, duration: 1.0, volume: 0.035, detuneEnd: 73 });
+function startHauntedMusicLoop() {
+  if (!audio.enabled) return;
+  resumeAudio();
+  if (audio.musicPlaying) return;
+  audio.musicPlaying = true;
+  audio.musicStep = 0;
+  scheduleHauntedMusicBar();
+  audio.musicIntervalId = setInterval(scheduleHauntedMusicBar, 2200);
+}
+
+function stopHauntedMusicLoop() {
+  audio.musicPlaying = false;
+  if (audio.musicIntervalId) {
+    clearInterval(audio.musicIntervalId);
+    audio.musicIntervalId = null;
+  }
+}
+
+function scheduleHauntedMusicBar() {
+  if (!audio.enabled || !audio.musicPlaying) return;
+
+  // 귀신의집 느낌: 끊기는 노이즈 대신 낮은 베이스 + 픽셀풍 단음 루프를 부드럽게 이어붙임
+  const bassPattern = [65.41, 61.74, 55.00, 49.00];
+  const melodyPattern = [261.63, 246.94, 196.00, 207.65, 174.61, 164.81, 146.83, 130.81];
+  const bass = bassPattern[audio.musicStep % bassPattern.length];
+  const melodyA = melodyPattern[(audio.musicStep * 2) % melodyPattern.length];
+  const melodyB = melodyPattern[(audio.musicStep * 2 + 1) % melodyPattern.length];
+
+  playTone({ frequency: bass, type: 'triangle', start: 0, duration: 2.35, volume: 0.075, detuneEnd: bass * 0.94, isMusic: true });
+  playTone({ frequency: bass * 1.5, type: 'square', start: 0.08, duration: 2.0, volume: 0.025, detuneEnd: bass * 1.42, isMusic: true });
+  playTone({ frequency: melodyA, type: 'square', start: 0.25, duration: 0.42, volume: 0.045, detuneEnd: melodyA * 0.88, isMusic: true });
+  playTone({ frequency: melodyB, type: 'triangle', start: 1.15, duration: 0.52, volume: 0.038, detuneEnd: melodyB * 0.84, isMusic: true });
+
+  if (audio.musicStep % 3 === 2) {
+    playTone({ frequency: 392, type: 'square', start: 1.72, duration: 0.16, volume: 0.025, detuneEnd: 311, isMusic: true });
+    playTone({ frequency: 98, type: 'triangle', start: 1.78, duration: 0.6, volume: 0.035, detuneEnd: 73, isMusic: true });
+  }
+
+  audio.musicStep += 1;
 }
 
 function playHitSound() {
   if (!audio.enabled) return;
   playTone({ frequency: 180, type: 'sawtooth', duration: 0.13, volume: 0.25, detuneEnd: 52 });
   playTone({ frequency: 70, type: 'square', start: 0.02, duration: 0.12, volume: 0.18, detuneEnd: 38 });
+}
+
+function playStageClearSound() {
+  if (!audio.enabled) return;
+  playTone({ frequency: 392, type: 'square', start: 0, duration: 0.12, volume: 0.12 });
+  playTone({ frequency: 523, type: 'square', start: 0.12, duration: 0.13, volume: 0.12 });
+  playTone({ frequency: 659, type: 'triangle', start: 0.25, duration: 0.24, volume: 0.14 });
+  playTone({ frequency: 1046, type: 'square', start: 0.43, duration: 0.16, volume: 0.07 });
+}
+
+function playStageFailSound() {
+  if (!audio.enabled) return;
+  playTone({ frequency: 220, type: 'sawtooth', start: 0, duration: 0.28, volume: 0.18, detuneEnd: 110 });
+  playTone({ frequency: 110, type: 'square', start: 0.12, duration: 0.36, volume: 0.18, detuneEnd: 55 });
+  playTone({ frequency: 55, type: 'triangle', start: 0.38, duration: 0.55, volume: 0.16, detuneEnd: 32 });
+}
+
+function playUpgradeHoverSound() {
+  if (!audio.enabled) return;
+  playTone({ frequency: 740, type: 'square', start: 0, duration: 0.045, volume: 0.045, detuneEnd: 620 });
+  playTone({ frequency: 370, type: 'triangle', start: 0.015, duration: 0.06, volume: 0.03, detuneEnd: 330 });
+}
+
+function playUpgradeSelectSound() {
+  if (!audio.enabled) return;
+  playTone({ frequency: 330, type: 'square', start: 0, duration: 0.08, volume: 0.08 });
+  playTone({ frequency: 494, type: 'square', start: 0.09, duration: 0.08, volume: 0.08 });
+  playTone({ frequency: 660, type: 'triangle', start: 0.18, duration: 0.18, volume: 0.09 });
 }
 
 const upgrades = [
@@ -132,12 +198,12 @@ function resetGame() {
   bulletTimer = 0;
   waveTimer = waveDuration;
   scoreTimer = 0;
-  ambienceTimer = 1.5;
   updateHud();
 }
 
 function startGame() {
   resumeAudio();
+  startHauntedMusicLoop();
   resetGame();
   gameState = 'playing';
   startPanel.classList.add('hidden');
@@ -149,8 +215,10 @@ function startGame() {
 }
 
 function nextWave() {
+  playStageClearSound();
   gameState = 'upgrade';
   bullets = [];
+  stopHauntedMusicLoop();
   showUpgradePanel();
 }
 
@@ -162,7 +230,6 @@ function applyWaveDifficulty() {
   bulletCount = Math.min(22, bulletCount + 1);
   waveTimer = waveDuration;
   bulletTimer = 0;
-  ambienceTimer = 1.2;
 }
 
 function showUpgradePanel() {
@@ -170,13 +237,18 @@ function showUpgradePanel() {
   [...upgrades].sort(() => Math.random() - 0.5).slice(0, 3).forEach((upgrade) => {
     const card = document.createElement('div');
     card.className = 'upgrade-card';
+    card.tabIndex = 0;
     card.innerHTML = `<h3>${upgrade.name}</h3><p>${upgrade.desc}</p>`;
+    card.addEventListener('mouseenter', playUpgradeHoverSound);
+    card.addEventListener('focus', playUpgradeHoverSound);
     card.addEventListener('click', () => {
+      playUpgradeSelectSound();
       upgrade.apply();
       applyWaveDifficulty();
       updateHud();
       upgradePanel.classList.add('hidden');
       gameState = 'playing';
+      startHauntedMusicLoop();
       lastTime = performance.now();
       animationId = requestAnimationFrame(gameLoop);
     });
@@ -224,11 +296,9 @@ function update(dt) {
   bulletTimer += dt;
   waveTimer -= dt;
   scoreTimer += dt;
-  ambienceTimer -= dt;
 
   if (bulletTimer >= fireInterval) { bulletTimer = 0; spawnPattern(); }
   if (scoreTimer >= 0.25) { scoreTimer = 0; score += 1; }
-  if (ambienceTimer <= 0) { playGhostAmbience(); ambienceTimer = 4.5 + Math.random() * 3.5; }
   if (player.invincible > 0) player.invincible -= dt;
   if (waveTimer <= 0) { score += wave * 25; nextWave(); }
   updateHud();
@@ -355,7 +425,9 @@ function updateHud() {
 }
 
 function endGame(isWin) {
+  if (!isWin) playStageFailSound();
   gameState = 'over';
+  stopHauntedMusicLoop();
   cancelAnimationFrame(animationId);
   resultTitle.textContent = isWin ? 'Victory!' : 'Game Over';
   resultText.textContent = `도달 웨이브: ${wave} / 최종 점수: ${score}`;

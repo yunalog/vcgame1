@@ -11,6 +11,7 @@ const upgradePanel = document.getElementById('upgradePanel');
 const gameOverPanel = document.getElementById('gameOverPanel');
 const startButton = document.getElementById('startButton');
 const restartButton = document.getElementById('restartButton');
+const soundButton = document.getElementById('soundButton');
 const upgradeCards = document.getElementById('upgradeCards');
 const resultTitle = document.getElementById('resultTitle');
 const resultText = document.getElementById('resultText');
@@ -42,6 +43,148 @@ const boss = {
 let bullets = [];
 let wave = 1;
 let score = 0;
+
+const audio = {
+  ctx: null,
+  masterGain: null,
+  bgGain: null,
+  droneOsc: null,
+  pulseOsc: null,
+  lfo: null,
+  lfoGain: null,
+  noiseSource: null,
+  noiseGain: null,
+  noiseFilter: null,
+  enabled: true,
+  started: false,
+};
+
+function setupAudio() {
+  if (audio.ctx) return;
+
+  audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  audio.masterGain = audio.ctx.createGain();
+  audio.masterGain.gain.value = audio.enabled ? 0.55 : 0;
+  audio.masterGain.connect(audio.ctx.destination);
+
+  audio.bgGain = audio.ctx.createGain();
+  audio.bgGain.gain.value = 0.045;
+  audio.bgGain.connect(audio.masterGain);
+
+  const now = audio.ctx.currentTime;
+
+  audio.droneOsc = audio.ctx.createOscillator();
+  audio.droneOsc.type = 'sine';
+  audio.droneOsc.frequency.value = 58;
+
+  audio.pulseOsc = audio.ctx.createOscillator();
+  audio.pulseOsc.type = 'triangle';
+  audio.pulseOsc.frequency.value = 87;
+
+  audio.lfo = audio.ctx.createOscillator();
+  audio.lfo.type = 'sine';
+  audio.lfo.frequency.value = 0.13;
+
+  audio.lfoGain = audio.ctx.createGain();
+  audio.lfoGain.gain.value = 0.025;
+  audio.lfo.connect(audio.lfoGain);
+  audio.lfoGain.connect(audio.bgGain.gain);
+
+  const noiseBuffer = audio.ctx.createBuffer(1, audio.ctx.sampleRate * 2, audio.ctx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+
+  audio.noiseSource = audio.ctx.createBufferSource();
+  audio.noiseSource.buffer = noiseBuffer;
+  audio.noiseSource.loop = true;
+
+  audio.noiseFilter = audio.ctx.createBiquadFilter();
+  audio.noiseFilter.type = 'lowpass';
+  audio.noiseFilter.frequency.value = 420;
+
+  audio.noiseGain = audio.ctx.createGain();
+  audio.noiseGain.gain.value = 0.015;
+
+  audio.droneOsc.connect(audio.bgGain);
+  audio.pulseOsc.connect(audio.bgGain);
+  audio.noiseSource.connect(audio.noiseFilter);
+  audio.noiseFilter.connect(audio.noiseGain);
+  audio.noiseGain.connect(audio.masterGain);
+
+  audio.droneOsc.start(now);
+  audio.pulseOsc.start(now);
+  audio.lfo.start(now);
+  audio.noiseSource.start(now);
+  audio.started = true;
+}
+
+function resumeAudio() {
+  setupAudio();
+  if (audio.ctx.state === 'suspended') {
+    audio.ctx.resume();
+  }
+}
+
+function setSoundEnabled(enabled) {
+  audio.enabled = enabled;
+  soundButton.textContent = enabled ? 'Sound ON' : 'Sound OFF';
+  soundButton.classList.toggle('muted', !enabled);
+
+  if (audio.masterGain) {
+    const now = audio.ctx.currentTime;
+    audio.masterGain.gain.cancelScheduledValues(now);
+    audio.masterGain.gain.setTargetAtTime(enabled ? 0.55 : 0, now, 0.04);
+  }
+}
+
+function playHitSound() {
+  if (!audio.enabled) return;
+  resumeAudio();
+
+  const now = audio.ctx.currentTime;
+  const hitOsc = audio.ctx.createOscillator();
+  const hitGain = audio.ctx.createGain();
+  const noiseBuffer = audio.ctx.createBuffer(1, audio.ctx.sampleRate * 0.15, audio.ctx.sampleRate);
+  const noiseData = noiseBuffer.getChannelData(0);
+
+  for (let i = 0; i < noiseData.length; i++) {
+    noiseData[i] = Math.random() * 2 - 1;
+  }
+
+  const noise = audio.ctx.createBufferSource();
+  const noiseFilter = audio.ctx.createBiquadFilter();
+  const noiseGain = audio.ctx.createGain();
+
+  hitOsc.type = 'sawtooth';
+  hitOsc.frequency.setValueAtTime(170, now);
+  hitOsc.frequency.exponentialRampToValueAtTime(55, now + 0.12);
+
+  hitGain.gain.setValueAtTime(0.001, now);
+  hitGain.gain.exponentialRampToValueAtTime(0.32, now + 0.015);
+  hitGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.value = 900;
+  noiseFilter.Q.value = 0.8;
+
+  noiseGain.gain.setValueAtTime(0.22, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+  hitOsc.connect(hitGain);
+  hitGain.connect(audio.masterGain);
+  noise.buffer = noiseBuffer;
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(audio.masterGain);
+
+  hitOsc.start(now);
+  noise.start(now);
+  hitOsc.stop(now + 0.18);
+  noise.stop(now + 0.15);
+}
+
 let waveDuration = 20;
 let fireInterval = 1.1;
 let bulletSpeed = 145;
@@ -110,6 +253,7 @@ function resetGame() {
 }
 
 function startGame() {
+  resumeAudio();
   resetGame();
   gameState = 'playing';
   startPanel.classList.add('hidden');
@@ -287,6 +431,7 @@ function checkCollisions() {
 
     if (distance < player.radius + bullet.radius) {
       player.hp -= 1;
+      playHitSound();
       player.invincible = 1.1 + (player.invincibleBonus || 0);
       bullets = bullets.filter((item) => item !== bullet);
 
@@ -405,8 +550,19 @@ window.addEventListener('keyup', (event) => {
   keys[event.key] = false;
 });
 
-startButton.addEventListener('click', startGame);
-restartButton.addEventListener('click', startGame);
+soundButton.addEventListener('click', () => {
+  resumeAudio();
+  setSoundEnabled(!audio.enabled);
+});
 
+startButton.addEventListener('click', startGame);
+resoundButton.addEventListener('click', () => {
+  resumeAudio();
+  setSoundEnabled(!audio.enabled);
+});
+
+startButton.addEventListener('click', startGame);
+
+setSoundEnabled(true);
 resetGame();
 draw();

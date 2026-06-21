@@ -34,12 +34,14 @@ body {
 
 .hud {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
   margin-bottom: 12px;
 }
 
-.hud div {
+.hud div,
+.sound-button {
+  min-height: 48px;
   padding: 12px;
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -103,6 +105,18 @@ button {
 
 button:hover {
   transform: translateY(-2px);
+}
+
+.sound-button {
+  padding: 10px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.sound-button.muted {
+  color: #aeb5d8;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .hidden {

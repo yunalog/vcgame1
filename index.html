@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rogue Boss</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="game-wrap">
+    <section class="title-area">
+      <h1>ROGUE BOSS</h1>
+      <p>보스 탄막을 피하고, 웨이브마다 업그레이드를 선택해 살아남으세요.</p>
+    </section>
+
+    <section class="hud">
+      <div>HP <span id="hpText">3</span></div>
+      <div>Wave <span id="waveText">1</span></div>
+      <div>Time <span id="timeText">20</span>s</div>
+      <div>Score <span id="scoreText">0</span></div>
+    </section>
+
+    <section class="canvas-box">
+      <canvas id="gameCanvas" width="900" height="560"></canvas>
+
+      <div id="startPanel" class="panel">
+        <h2>보스전 시작</h2>
+        <p>WASD 또는 방향키로 이동하세요.<br />탄막을 피하고 제한 시간을 버티면 다음 웨이브로 넘어갑니다.</p>
+        <button id="startButton">게임 시작</button>
+      </div>
+
+      <div id="upgradePanel" class="panel hidden">
+        <h2>업그레이드 선택</h2>
+        <p>웨이브를 클리어했습니다. 하나를 선택하세요.</p>
+        <div id="upgradeCards" class="upgrade-cards"></div>
+      </div>
+
+      <div id="gameOverPanel" class="panel hidden">
+        <h2 id="resultTitle">Game Over</h2>
+        <p id="resultText"></p>
+        <button id="restartButton">다시 시작</button>
+      </div>
+    </section>
+
+    <section class="guide">
+      <strong>조작:</strong> WASD / 방향키 이동<br />
+      <strong>목표:</strong> 보스 탄막을 피하며 최대한 많은 웨이브 생존
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

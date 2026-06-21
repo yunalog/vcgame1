@@ -7,6 +7,8 @@ const finalWaveText = document.getElementById('finalWaveText');
 const timeText = document.getElementById('timeText');
 const scoreText = document.getElementById('scoreText');
 const difficultyText = document.getElementById('difficultyText');
+const starText = document.getElementById('starText');
+const modeButtons = document.querySelectorAll('.mode-button');
 
 const startPanel = document.getElementById('startPanel');
 const upgradePanel = document.getElementById('upgradePanel');
@@ -20,10 +22,16 @@ const resultText = document.getElementById('resultText');
 const rankForm = document.getElementById('rankForm');
 const nicknameInput = document.getElementById('nicknameInput');
 const rankingList = document.getElementById('rankingList');
+const rankingBox = document.querySelector('.ranking-box');
 
 const keys = {};
 const FINAL_WAVE = 20;
 const RANKING_KEY = 'rogueBossPlayLogs';
+const STAR_GOAL = 3;
+const MAX_STARS_PER_WAVE = 6;
+const INFINITE_WAVE_END = Infinity;
+const INFINITE_STAR_SPAWN_INTERVAL = 2.2;
+const STAR_BONUS_SCORE = 50;
 
 let gameState = 'ready';
 let lastTime = 0;
@@ -34,6 +42,9 @@ let scoreTimer = 0;
 let animationId = null;
 let rankSavedThisRun = false;
 let lastResultIsWin = false;
+let selectedMode = { label: '무한모드', startWave: 1, endWave: INFINITE_WAVE_END, infinite: true };
+let currentRunStartWave = 1;
+let currentRunEndWave = FINAL_WAVE;
 
 const player = {
   x: canvas.width / 2,
@@ -54,12 +65,16 @@ const boss = {
 let bullets = [];
 let lasers = [];
 let dangerZones = [];
+let stars = [];
+let floatingTexts = [];
 let wave = 1;
 let score = 0;
 let waveDuration = 20;
 let fireInterval = 1.1;
 let bulletSpeed = 145;
 let bulletCount = 8;
+let collectedStars = 0;
+let starSpawnTimer = 0;
 
 const upgrades = [
   {
@@ -165,6 +180,10 @@ function playSaveSound() {
   playTone({ frequency: 523, duration: 0.08, type: 'square', volume: 0.06 });
   setTimeout(() => playTone({ frequency: 659, duration: 0.08, type: 'square', volume: 0.06 }), 80);
 }
+function playStarSound() {
+  playTone({ frequency: 880, duration: 0.07, type: 'square', volume: 0.055 });
+  setTimeout(() => playTone({ frequency: 1175, duration: 0.08, type: 'square', volume: 0.045 }), 60);
+}
 function playSpecialWarningSound() {
   playTone({ frequency: 260, slideTo: 170, duration: 0.2, type: 'square', volume: 0.07 });
 }
@@ -228,7 +247,11 @@ function isEliteWave(targetWave = wave) {
   return isBossWave(targetWave);
 }
 
-function resetGame() {
+function isInfiniteMode() {
+  return selectedMode.infinite === true || currentRunEndWave === INFINITE_WAVE_END;
+}
+
+function resetGame(startWave = selectedMode.startWave, endWave = selectedMode.endWave) {
   player.x = canvas.width / 2;
   player.y = canvas.height - 80;
   player.radius = 14;
@@ -241,14 +264,20 @@ function resetGame() {
   bullets = [];
   lasers = [];
   dangerZones = [];
-  wave = 1;
+  stars = [];
+  floatingTexts = [];
+  currentRunStartWave = startWave;
+  currentRunEndWave = endWave;
+  wave = startWave;
   score = 0;
+  collectedStars = 0;
+  starSpawnTimer = 0;
   bulletTimer = 0;
   specialTimer = 0;
   scoreTimer = 0;
   rankSavedThisRun = false;
   lastResultIsWin = false;
-  finalWaveText.textContent = FINAL_WAVE;
+  finalWaveText.textContent = isInfiniteMode() ? '∞' : currentRunEndWave;
   setWaveStats();
   updateHud();
 }
@@ -266,16 +295,20 @@ function setWaveStats() {
   waveTimer = waveDuration;
   bulletTimer = 0;
   specialTimer = difficulty.stage >= 3 ? 1.6 : 999;
+  spawnStars();
 }
 
-function startGame() {
+function startGame(mode = selectedMode) {
+  selectedMode = mode;
+  setActiveModeButton();
   resumeAudio();
-  resetGame();
+  resetGame(mode.startWave, mode.endWave);
   gameState = 'playing';
   startPanel.classList.add('hidden');
   upgradePanel.classList.add('hidden');
   gameOverPanel.classList.add('hidden');
   rankForm.classList.add('hidden');
+  if (rankingBox) rankingBox.classList.add('hidden');
   lastTime = performance.now();
   cancelAnimationFrame(animationId);
   startAmbience();
@@ -286,8 +319,10 @@ function nextWave() {
   bullets = [];
   lasers = [];
   dangerZones = [];
+  stars = [];
+  floatingTexts = [];
 
-  if (wave >= FINAL_WAVE) {
+  if (!isInfiniteMode() && wave >= currentRunEndWave) {
     endGame(true);
     return;
   }
@@ -508,11 +543,94 @@ function createBullet(angle, speed) {
   });
 }
 
+
+function createStar() {
+  const safeDistanceFromBoss = boss.radius + 80;
+  const safeDistanceBetweenStars = 38;
+  let attempts = 0;
+
+  while (attempts < 120) {
+    attempts += 1;
+    const x = 42 + Math.random() * (canvas.width - 84);
+    const y = 135 + Math.random() * (canvas.height - 180);
+    const bossDistance = Math.hypot(x - boss.x, y - boss.y);
+    const overlapsStar = stars.some((star) => Math.hypot(x - star.x, y - star.y) < safeDistanceBetweenStars);
+
+    if (bossDistance > safeDistanceFromBoss && !overlapsStar) {
+      stars.push({ x, y, radius: 13, pulse: Math.random() * Math.PI * 2 });
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function spawnStars() {
+  stars = [];
+  collectedStars = 0;
+  starSpawnTimer = 0;
+
+  const startStarCount = isInfiniteMode() ? MAX_STARS_PER_WAVE : MAX_STARS_PER_WAVE;
+  for (let i = 0; i < startStarCount; i++) createStar();
+}
+
+function updateInfiniteStarSpawn(dt) {
+  if (!isInfiniteMode()) return;
+
+  starSpawnTimer += dt;
+  if (starSpawnTimer >= INFINITE_STAR_SPAWN_INTERVAL) {
+    starSpawnTimer = 0;
+    createStar();
+  }
+}
+
+function updateStars(dt) {
+  stars.forEach((star) => {
+    star.pulse += dt * 5;
+  });
+}
+
+function updateFloatingTexts(dt) {
+  floatingTexts.forEach((text) => {
+    text.y -= 45 * dt;
+    text.life -= dt;
+  });
+  floatingTexts = floatingTexts.filter((text) => text.life > 0);
+}
+
+function collectStar(star) {
+  collectedStars += 1;
+  stars = stars.filter((item) => item !== star);
+  playStarSound();
+
+  if (collectedStars > STAR_GOAL) {
+    score += STAR_BONUS_SCORE;
+    floatingTexts.push({
+      text: `+${STAR_BONUS_SCORE}`,
+      x: star.x,
+      y: star.y - 18,
+      life: 0.85,
+      color: '#ffd166',
+    });
+  } else {
+    floatingTexts.push({
+      text: `★ ${collectedStars}/${STAR_GOAL}`,
+      x: star.x,
+      y: star.y - 18,
+      life: 0.65,
+      color: '#fff2a8',
+    });
+  }
+}
+
 function update(dt) {
   updatePlayer(dt);
   updateBullets(dt);
   updateLasers(dt);
   updateDangerZones(dt);
+  updateStars(dt);
+  updateInfiniteStarSpawn(dt);
+  updateFloatingTexts(dt);
   checkCollisions();
 
   bulletTimer += dt;
@@ -538,6 +656,11 @@ function update(dt) {
   if (player.invincible > 0) player.invincible -= dt;
 
   if (waveTimer <= 0) {
+    if (collectedStars < STAR_GOAL) {
+      endGame(false, `별 ${STAR_GOAL}개 이상을 모아야 다음 웨이브로 넘어갈 수 있어요. 이번 웨이브 수집: ${collectedStars}개`);
+      return;
+    }
+
     score += wave * 25;
     if (isBossWave(wave)) score += 150;
     nextWave();
@@ -619,6 +742,14 @@ function updateDangerZones(dt) {
 }
 
 function checkCollisions() {
+  for (const star of stars) {
+    const distance = Math.hypot(player.x - star.x, player.y - star.y);
+    if (distance < player.radius + star.radius) {
+      collectStar(star);
+      return;
+    }
+  }
+
   if (player.invincible > 0) return;
 
   for (const bullet of bullets) {
@@ -667,8 +798,10 @@ function draw() {
   drawBoss();
   drawDangerZones();
   drawLasers();
+  drawStars();
   drawBullets();
   drawPlayer();
+  drawFloatingTexts();
 }
 
 function drawArena() {
@@ -788,33 +921,87 @@ function drawLasers() {
   });
 }
 
+
+function drawStarShape(x, y, outerRadius, innerRadius, points) {
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+    const angle = -Math.PI / 2 + (Math.PI * i) / points;
+    const px = x + Math.cos(angle) * radius;
+    const py = y + Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function drawStars() {
+  stars.forEach((star) => {
+    const pulse = Math.sin(star.pulse) * 2;
+    ctx.save();
+    ctx.shadowColor = 'rgba(255, 209, 102, 0.75)';
+    ctx.shadowBlur = 14;
+    drawStarShape(star.x, star.y, star.radius + pulse, star.radius * 0.48, 5);
+    ctx.fillStyle = '#ffd166';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
+function drawFloatingTexts() {
+  floatingTexts.forEach((item) => {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, item.life / 0.85);
+    ctx.fillStyle = item.color;
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(item.text, item.x, item.y);
+    ctx.restore();
+  });
+}
+
 function updateHud() {
   hpText.textContent = `${player.hp}/${player.maxHp}`;
   waveText.textContent = wave;
   timeText.textContent = Math.max(0, Math.ceil(waveTimer));
   scoreText.textContent = score;
+  if (starText) starText.textContent = isInfiniteMode() ? `${collectedStars}/∞` : `${collectedStars}/${MAX_STARS_PER_WAVE}`;
   const difficulty = getDifficultyInfo();
   if (difficultyText) {
     difficultyText.textContent = `${difficulty.name}${difficulty.isBoss ? ' / 보스전' : ''}`;
   }
 }
 
-function endGame(isWin) {
+function endGame(isWin, failReason = '') {
   gameState = 'over';
   cancelAnimationFrame(animationId);
   stopAmbience();
 
   lastResultIsWin = isWin;
   resultTitle.textContent = isWin ? 'Ending Clear!' : 'Game Over';
-  resultText.textContent = `결과: ${isWin ? '엔딩 클리어' : '게임오버'} / 도달 웨이브: ${wave}/${FINAL_WAVE} / 최종 점수: ${score}`;
+  const modeLabel = selectedMode.label || '무한모드';
+  const reasonText = failReason ? ` / 실패 사유: ${failReason}` : '';
+  const endWaveLabel = isInfiniteMode() ? '∞' : currentRunEndWave;
+  resultText.textContent = `모드: ${modeLabel} / 결과: ${isWin ? '클리어' : '게임오버'} / 도달 웨이브: ${wave}/${endWaveLabel} / 최종 점수: ${score}${reasonText}`;
 
   if (isWin) playStageClearSound();
   else playStageFailSound();
 
   rankSavedThisRun = false;
-  rankForm.classList.remove('hidden');
   nicknameInput.value = '';
-  setTimeout(() => nicknameInput.focus(), 100);
+
+  if (isInfiniteMode()) {
+    rankForm.classList.remove('hidden');
+    if (rankingBox) rankingBox.classList.remove('hidden');
+    setTimeout(() => nicknameInput.focus(), 100);
+  } else {
+    rankForm.classList.add('hidden');
+    if (rankingBox) rankingBox.classList.add('hidden');
+  }
 
   renderRankings();
   gameOverPanel.classList.remove('hidden');
@@ -839,6 +1026,7 @@ function saveRanking(nickname) {
     name: cleanName,
     score,
     wave,
+    mode: selectedMode.label || '무한모드',
     result: lastResultIsWin ? 'CLEAR' : 'FAIL',
     date: new Date().toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
   });
@@ -864,7 +1052,7 @@ function renderRankings() {
   rankings.forEach((rank) => {
     const item = document.createElement('li');
     const resultLabel = rank.result === 'CLEAR' ? '엔딩 클리어' : '게임오버';
-    item.innerHTML = `<strong>${rank.name}</strong> — ${resultLabel} / Wave ${rank.wave} <span class="rank-meta">/ ${rank.score}점 / ${rank.date}</span>`;
+    item.innerHTML = `<strong>${rank.name}</strong> — ${rank.mode || '무한모드'} / ${resultLabel} / Wave ${rank.wave} <span class="rank-meta">/ ${rank.score}점 / ${rank.date}</span>`;
     rankingList.appendChild(item);
   });
 }
@@ -885,11 +1073,34 @@ window.addEventListener('keyup', (event) => { keys[event.key] = false; });
 
 function handleStartClick(event) {
   event.preventDefault();
-  startGame();
+  startGame(selectedMode);
 }
 
+
+function setActiveModeButton() {
+  modeButtons.forEach((button) => {
+    const buttonEndWave = button.dataset.infinite === 'true' ? INFINITE_WAVE_END : Number(button.dataset.end);
+    const isActive = Number(button.dataset.start) === selectedMode.startWave && buttonEndWave === selectedMode.endWave;
+    button.classList.toggle('active', isActive);
+  });
+}
+
+modeButtons.forEach((button) => {
+  button.addEventListener('mouseenter', playHoverSound);
+  button.addEventListener('focus', playHoverSound);
+  button.addEventListener('click', () => {
+    playSelectSound();
+    const mode = {
+      label: button.dataset.label,
+      startWave: Number(button.dataset.start),
+      endWave: button.dataset.infinite === 'true' ? INFINITE_WAVE_END : Number(button.dataset.end),
+      infinite: button.dataset.infinite === 'true',
+    };
+    startGame(mode);
+  });
+});
+
 startButton.addEventListener('click', handleStartClick);
-restartButton.addEventListener('click', handleStartClick);
 
 soundButton.addEventListener('click', () => {
   audio.enabled = !audio.enabled;
@@ -912,4 +1123,5 @@ rankForm.addEventListener('submit', (event) => {
 resetGame();
 renderRankings();
 setSoundButtonText();
+setActiveModeButton();
 draw();

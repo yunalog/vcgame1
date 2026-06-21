@@ -10,7 +10,7 @@
   <main class="game-wrap">
     <section class="title-area">
       <h1>ROGUE BOSS</h1>
-      <p>5개 챕터, 총 20웨이브로 구성된 픽셀 악마 보스전을 클리어하세요.</p>
+      <p>별을 모아 웨이브를 돌파하고, 무한모드에서 최고 기록에 도전하세요.</p>
     </section>
 
     <section class="hud">
@@ -19,7 +19,17 @@
       <div>Difficulty <span id="difficultyText">1단계</span></div>
       <div>Time <span id="timeText">20</span>s</div>
       <div>Score <span id="scoreText">0</span></div>
+      <div>Star <span id="starText">0/6</span></div>
       <button id="soundButton" class="sound-button" type="button">Sound ON</button>
+    </section>
+
+    <section class="mode-select" aria-label="게임 모드 선택">
+      <button class="mode-button" type="button" data-label="1단계" data-start="1" data-end="4">1단계<br /><span>1~4 Wave</span></button>
+      <button class="mode-button" type="button" data-label="2단계" data-start="5" data-end="8">2단계<br /><span>5~8 Wave</span></button>
+      <button class="mode-button" type="button" data-label="3단계" data-start="9" data-end="12">3단계<br /><span>9~12 Wave</span></button>
+      <button class="mode-button" type="button" data-label="4단계" data-start="13" data-end="16">4단계<br /><span>13~16 Wave</span></button>
+      <button class="mode-button" type="button" data-label="5단계" data-start="17" data-end="20">5단계<br /><span>17~20 Wave</span></button>
+      <button class="mode-button mode-all active" type="button" data-label="무한모드" data-start="1" data-end="" data-infinite="true">무한모드<br /><span>Endless</span></button>
     </section>
 
     <section class="canvas-box">
@@ -27,7 +37,7 @@
 
       <div id="startPanel" class="panel">
         <h2>보스전 시작</h2>
-        <p>WASD 또는 방향키로 이동하세요.<br />탄막을 피하고 제한 시간을 버티면 다음 웨이브로 넘어갑니다.<br />각 챕터는 일반 웨이브 3개 + 보스 웨이브 1개로 구성됩니다. 4, 8, 12, 16, 20웨이브에서는 해당 챕터 패턴을 마무리하는 강화 보스전이 등장합니다.</p>
+        <p>WASD 또는 방향키로 이동하세요.<br />탄막을 피하면서 별 3개 이상을 모아야 다음 웨이브로 넘어갑니다.<br />4번째 별부터는 별 1개당 +50 보너스 점수가 즉시 지급됩니다.<br />무한모드에서는 웨이브마다 별이 계속 추가로 등장하며, 랭킹 등록은 무한모드에서만 가능합니다.<br />각 챕터는 일반 웨이브 3개 + 보스 웨이브 1개로 구성됩니다. 4, 8, 12, 16, 20웨이브에서는 해당 챕터 패턴을 마무리하는 강화 보스전이 등장합니다.</p>
         <button id="startButton" type="button">게임 시작</button>
       </div>
 
@@ -42,7 +52,7 @@
         <p id="resultText"></p>
 
         <form id="rankForm" class="rank-form hidden">
-          <label for="nicknameInput">게임 종료! 닉네임을 남겨 플레이 로그를 남겨주세요.</label>
+          <label for="nicknameInput">무한모드 종료! 닉네임을 남겨 랭킹에 기록하세요.</label>
           <div class="rank-input-row">
             <input id="nicknameInput" type="text" maxlength="12" placeholder="닉네임 입력" autocomplete="off" />
             <button type="submit">기록 저장</button>
@@ -50,7 +60,7 @@
         </form>
 
         <div class="ranking-box">
-          <h3>TOP 10 플레이 로그</h3>
+          <h3>무한모드 TOP 10 랭킹</h3>
           <ol id="rankingList" class="ranking-list"></ol>
         </div>
 
@@ -60,7 +70,7 @@
 
     <section class="guide">
       <strong>조작:</strong> WASD / 방향키 이동<br />
-      <strong>목표:</strong> 20웨이브까지 생존하며 5개 챕터 보스 패턴 돌파
+      <strong>목표:</strong> 웨이브마다 별 3개 이상 수집 + 무한모드 최고 기록 도전
     </section>
   </main>
 

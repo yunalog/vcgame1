@@ -35,6 +35,7 @@ const STAR_GOAL = 3;
 const MAX_STARS_PER_WAVE = 6;
 const STAR_BONUS_SCORE = 50;
 const STAR_SPAWN_INTERVAL = 3.2;
+const INFINITE_STAR_SPAWN_INTERVAL = 2.5;
 const PILLOW_BASE_MAX = 3;
 const PILLOW_BASE_COOLDOWN = 0.45;
 
@@ -625,7 +626,11 @@ function update(dt) {
     score += 1;
   }
 
-  if (starTimer >= STAR_SPAWN_INTERVAL) {
+  const currentStarInterval = currentRunIsInfinite
+    ? INFINITE_STAR_SPAWN_INTERVAL
+    : STAR_SPAWN_INTERVAL;
+
+  if (starTimer >= currentStarInterval) {
     starTimer = 0;
     spawnStar();
   }

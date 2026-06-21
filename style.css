@@ -1,44 +1,62 @@
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
   min-height: 100vh;
   font-family: Arial, sans-serif;
-  color: #fff4f4;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(117, 0, 0, 0.42) 0%, transparent 36%),
-    radial-gradient(circle at top, #251018 0%, #0d0b12 48%, #050507 100%);
+  color: #f5f7ff;
+  background: radial-gradient(circle at top, #3a1020 0%, #101423 45%, #070911 100%);
 }
 
-.game-wrap { width: min(960px, 94vw); margin: 0 auto; padding: 28px 0; }
-.title-area { text-align: center; margin-bottom: 18px; }
+.game-wrap {
+  width: min(960px, 94vw);
+  margin: 0 auto;
+  padding: 28px 0;
+}
+
+.title-area {
+  text-align: center;
+  margin-bottom: 18px;
+}
+
 .title-area h1 {
   margin: 0;
-  letter-spacing: 7px;
+  letter-spacing: 6px;
   font-size: 42px;
-  color: #ffdad2;
-  text-shadow: 0 0 10px rgba(255, 35, 35, 0.8), 0 0 24px rgba(120, 0, 0, 0.9);
+  text-shadow: 0 0 18px rgba(255, 30, 70, 0.5);
 }
-.title-area p { margin: 8px 0 0; color: #d8b7b7; }
 
-.hud { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
-.hud div, .sound-button {
-  min-height: 48px;
+.title-area p {
+  margin: 8px 0 0;
+  color: #c4c9e6;
+}
+
+.hud {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.hud div,
+.sound-button {
   padding: 12px;
   text-align: center;
-  border: 1px solid rgba(255, 84, 84, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
-  background: rgba(40, 7, 10, 0.72);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32), inset 0 0 16px rgba(255, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 
 .canvas-box {
   position: relative;
   border-radius: 20px;
   overflow: hidden;
-  border: 1px solid rgba(255, 70, 70, 0.24);
-  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.58), 0 0 38px rgba(128, 0, 0, 0.24);
-  background: #08070b;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  background: #0b1022;
 }
 
 canvas {
@@ -46,7 +64,7 @@ canvas {
   width: 100%;
   height: auto;
   image-rendering: pixelated;
-  background: linear-gradient(180deg, #16080d 0%, #07070b 100%);
+  background: linear-gradient(180deg, #151018 0%, #070a14 100%);
 }
 
 .panel {
@@ -59,11 +77,21 @@ canvas {
   gap: 16px;
   padding: 28px;
   text-align: center;
-  background: rgba(5, 3, 6, 0.82);
+  background: rgba(4, 6, 15, 0.82);
   backdrop-filter: blur(8px);
+  overflow-y: auto;
 }
-.panel h2 { margin: 0; font-size: 34px; color: #ffe3dc; text-shadow: 0 0 14px rgba(255, 0, 0, 0.55); }
-.panel p { margin: 0; line-height: 1.6; color: #e9c9c9; }
+
+.panel h2 {
+  margin: 0;
+  font-size: 34px;
+}
+
+.panel p {
+  margin: 0;
+  line-height: 1.6;
+  color: #d8dcf5;
+}
 
 button {
   border: 0;
@@ -73,41 +101,136 @@ button {
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
-  background: linear-gradient(135deg, #ba1515, #431018);
-  box-shadow: 0 12px 24px rgba(186, 21, 21, 0.35);
+  background: linear-gradient(135deg, #9b1b30, #1a0b10);
+  box-shadow: 0 12px 24px rgba(255, 35, 75, 0.28);
+  transition: transform 0.15s ease, filter 0.15s ease;
 }
-button:hover { transform: translateY(-2px); }
 
-.sound-button { padding: 10px; font-size: 14px; background: rgba(65, 10, 15, 0.76); }
-.sound-button.muted { color: #a88888; background: rgba(255, 255, 255, 0.035); }
-.hidden { display: none; }
+button:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.15);
+}
 
-.upgrade-cards { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 14px; width: min(720px, 92%); }
+.hidden {
+  display: none;
+}
+
+.upgrade-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 14px;
+  width: min(720px, 92%);
+}
+
 .upgrade-card {
   min-height: 150px;
   padding: 18px;
-  border: 1px solid rgba(255, 90, 90, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 18px;
   color: white;
   text-align: left;
   cursor: pointer;
-  background: rgba(70, 12, 16, 0.64);
+  background: rgba(255, 255, 255, 0.09);
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
-.upgrade-card:hover, .upgrade-card:focus { transform: translateY(-4px); background: rgba(110, 20, 24, 0.72); outline: 1px solid rgba(255, 210, 120, 0.65); }
-.upgrade-card h3 { margin: 0 0 10px; }
-.upgrade-card p { color: #edcfcf; }
+
+.upgrade-card:hover,
+.upgrade-card:focus {
+  transform: translateY(-4px);
+  background: rgba(190, 30, 50, 0.28);
+  border-color: rgba(255, 120, 120, 0.55);
+}
+
+.upgrade-card h3 {
+  margin: 0 0 10px;
+}
+
+.upgrade-card p {
+  color: #cfd4ef;
+}
+
+.rank-form {
+  width: min(520px, 92%);
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rank-form label {
+  display: block;
+  margin-bottom: 10px;
+  color: #fff0f0;
+  font-weight: 700;
+}
+
+.rank-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.rank-input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  color: white;
+  outline: none;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.ranking-box {
+  width: min(620px, 94%);
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.ranking-box h3 {
+  margin: 0 0 10px;
+}
+
+.ranking-list {
+  margin: 0;
+  padding-left: 26px;
+  text-align: left;
+}
+
+.ranking-list li {
+  margin: 7px 0;
+  color: #e8ebff;
+}
+
+.rank-meta {
+  color: #aeb5d6;
+  font-size: 13px;
+}
 
 .guide {
   margin-top: 14px;
   padding: 14px 16px;
   line-height: 1.6;
-  color: #e8caca;
+  color: #d7dcf7;
   border-radius: 14px;
-  background: rgba(65, 10, 15, 0.48);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 @media (max-width: 720px) {
-  .hud { grid-template-columns: repeat(2, 1fr); }
-  .upgrade-cards { grid-template-columns: 1fr; }
-  .title-area h1 { font-size: 30px; }
+  .hud {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .upgrade-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .rank-input-row {
+    flex-direction: column;
+  }
+
+  .title-area h1 {
+    font-size: 30px;
+  }
 }

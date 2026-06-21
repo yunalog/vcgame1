@@ -3,8 +3,10 @@ const ctx = canvas.getContext('2d');
 
 const hpText = document.getElementById('hpText');
 const waveText = document.getElementById('waveText');
+const finalWaveText = document.getElementById('finalWaveText');
 const timeText = document.getElementById('timeText');
 const scoreText = document.getElementById('scoreText');
+
 const startPanel = document.getElementById('startPanel');
 const upgradePanel = document.getElementById('upgradePanel');
 const gameOverPanel = document.getElementById('gameOverPanel');
@@ -14,14 +16,21 @@ const soundButton = document.getElementById('soundButton');
 const upgradeCards = document.getElementById('upgradeCards');
 const resultTitle = document.getElementById('resultTitle');
 const resultText = document.getElementById('resultText');
+const rankForm = document.getElementById('rankForm');
+const nicknameInput = document.getElementById('nicknameInput');
+const rankingList = document.getElementById('rankingList');
 
 const keys = {};
+const FINAL_WAVE = 7;
+const RANKING_KEY = 'rogueBossRankings';
+
 let gameState = 'ready';
 let lastTime = 0;
 let bulletTimer = 0;
 let waveTimer = 0;
 let scoreTimer = 0;
 let animationId = null;
+let rankSavedThisRun = false;
 
 const player = {
   x: canvas.width / 2,
@@ -33,7 +42,12 @@ const player = {
   invincible: 0,
 };
 
-const boss = { x: canvas.width / 2, y: 100, scale: 6 };
+const boss = {
+  x: canvas.width / 2,
+  y: 95,
+  radius: 42,
+};
+
 let bullets = [];
 let wave = 1;
 let score = 0;
@@ -42,152 +56,150 @@ let fireInterval = 1.1;
 let bulletSpeed = 145;
 let bulletCount = 8;
 
+const upgrades = [
+  {
+    name: '최대 체력 +1',
+    desc: '최대 HP가 1 증가하고 체력을 1 회복합니다.',
+    apply: () => {
+      player.maxHp += 1;
+      player.hp = Math.min(player.maxHp, player.hp + 1);
+    },
+  },
+  {
+    name: '이동속도 +15%',
+    desc: '탄막을 피하기 쉬워집니다.',
+    apply: () => {
+      player.speed *= 1.15;
+    },
+  },
+  {
+    name: '피격 무적 +0.4초',
+    desc: '맞은 직후 무적 시간이 길어집니다.',
+    apply: () => {
+      player.invincibleBonus = (player.invincibleBonus || 0) + 0.4;
+    },
+  },
+  {
+    name: '체력 2 회복',
+    desc: '현재 HP를 2 회복합니다.',
+    apply: () => {
+      player.hp = Math.min(player.maxHp, player.hp + 2);
+    },
+  },
+  {
+    name: '크기 감소',
+    desc: '플레이어 충돌 범위가 작아집니다.',
+    apply: () => {
+      player.radius = Math.max(8, player.radius - 2);
+    },
+  },
+];
+
 const audio = {
   ctx: null,
-  masterGain: null,
-  musicGain: null,
   enabled: true,
-  musicPlaying: false,
-  musicIntervalId: null,
-  musicStep: 0,
+  ambienceTimer: null,
 };
 
-function setupAudio() {
+function initAudio() {
   if (audio.ctx) return;
   audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
-  audio.masterGain = audio.ctx.createGain();
-  audio.musicGain = audio.ctx.createGain();
-  audio.masterGain.gain.value = audio.enabled ? 0.72 : 0;
-  audio.musicGain.gain.value = 0.26;
-  audio.musicGain.connect(audio.masterGain);
-  audio.masterGain.connect(audio.ctx.destination);
 }
 
 function resumeAudio() {
-  setupAudio();
-  if (audio.ctx.state === 'suspended') audio.ctx.resume();
-}
-
-function setSoundEnabled(enabled) {
-  audio.enabled = enabled;
-  soundButton.textContent = enabled ? 'Sound ON' : 'Sound OFF';
-  soundButton.classList.toggle('muted', !enabled);
-  if (audio.masterGain) {
-    const now = audio.ctx.currentTime;
-    audio.masterGain.gain.cancelScheduledValues(now);
-    audio.masterGain.gain.setTargetAtTime(enabled ? 0.72 : 0, now, 0.04);
+  initAudio();
+  if (audio.ctx.state === 'suspended') {
+    audio.ctx.resume();
   }
-  if (enabled && gameState === 'playing') startHauntedMusicLoop();
 }
 
-function connectToMaster(node, isMusic = false) {
-  node.connect(isMusic ? audio.musicGain : audio.masterGain);
+function setSoundButtonText() {
+  soundButton.textContent = audio.enabled ? 'Sound ON' : 'Sound OFF';
 }
 
-function playTone({ frequency, type = 'square', start = 0, duration = 0.2, volume = 0.12, detuneEnd = null, isMusic = false }) {
+function playTone({ frequency = 440, duration = 0.2, type = 'square', volume = 0.08, slideTo = null }) {
   if (!audio.enabled) return;
   resumeAudio();
-  const now = audio.ctx.currentTime + start;
-  const osc = audio.ctx.createOscillator();
+
+  const now = audio.ctx.currentTime;
+  const oscillator = audio.ctx.createOscillator();
   const gain = audio.ctx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(frequency, now);
-  if (detuneEnd) osc.frequency.exponentialRampToValueAtTime(Math.max(20, detuneEnd), now + duration);
+
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, now);
+  if (slideTo) {
+    oscillator.frequency.exponentialRampToValueAtTime(slideTo, now + duration);
+  }
+
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(volume, now + 0.025);
-  gain.gain.setValueAtTime(volume * 0.72, Math.max(now + 0.03, now + duration * 0.68));
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.02);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-  osc.connect(gain);
-  connectToMaster(gain, isMusic);
-  osc.start(now);
-  osc.stop(now + duration + 0.04);
-}
 
-function startHauntedMusicLoop() {
-  if (!audio.enabled) return;
-  resumeAudio();
-  if (audio.musicPlaying) return;
-  audio.musicPlaying = true;
-  audio.musicStep = 0;
-  scheduleHauntedMusicBar();
-  audio.musicIntervalId = setInterval(scheduleHauntedMusicBar, 2200);
-}
-
-function stopHauntedMusicLoop() {
-  audio.musicPlaying = false;
-  if (audio.musicIntervalId) {
-    clearInterval(audio.musicIntervalId);
-    audio.musicIntervalId = null;
-  }
-}
-
-function scheduleHauntedMusicBar() {
-  if (!audio.enabled || !audio.musicPlaying) return;
-
-  // 귀신의집 느낌: 끊기는 노이즈 대신 낮은 베이스 + 픽셀풍 단음 루프를 부드럽게 이어붙임
-  const bassPattern = [65.41, 61.74, 55.00, 49.00];
-  const melodyPattern = [261.63, 246.94, 196.00, 207.65, 174.61, 164.81, 146.83, 130.81];
-  const bass = bassPattern[audio.musicStep % bassPattern.length];
-  const melodyA = melodyPattern[(audio.musicStep * 2) % melodyPattern.length];
-  const melodyB = melodyPattern[(audio.musicStep * 2 + 1) % melodyPattern.length];
-
-  playTone({ frequency: bass, type: 'triangle', start: 0, duration: 2.35, volume: 0.075, detuneEnd: bass * 0.94, isMusic: true });
-  playTone({ frequency: bass * 1.5, type: 'square', start: 0.08, duration: 2.0, volume: 0.025, detuneEnd: bass * 1.42, isMusic: true });
-  playTone({ frequency: melodyA, type: 'square', start: 0.25, duration: 0.42, volume: 0.045, detuneEnd: melodyA * 0.88, isMusic: true });
-  playTone({ frequency: melodyB, type: 'triangle', start: 1.15, duration: 0.52, volume: 0.038, detuneEnd: melodyB * 0.84, isMusic: true });
-
-  if (audio.musicStep % 3 === 2) {
-    playTone({ frequency: 392, type: 'square', start: 1.72, duration: 0.16, volume: 0.025, detuneEnd: 311, isMusic: true });
-    playTone({ frequency: 98, type: 'triangle', start: 1.78, duration: 0.6, volume: 0.035, detuneEnd: 73, isMusic: true });
-  }
-
-  audio.musicStep += 1;
+  oscillator.connect(gain);
+  gain.connect(audio.ctx.destination);
+  oscillator.start(now);
+  oscillator.stop(now + duration + 0.03);
 }
 
 function playHitSound() {
-  if (!audio.enabled) return;
-  playTone({ frequency: 180, type: 'sawtooth', duration: 0.13, volume: 0.25, detuneEnd: 52 });
-  playTone({ frequency: 70, type: 'square', start: 0.02, duration: 0.12, volume: 0.18, detuneEnd: 38 });
+  playTone({ frequency: 150, slideTo: 70, duration: 0.18, type: 'sawtooth', volume: 0.12 });
 }
 
 function playStageClearSound() {
-  if (!audio.enabled) return;
-  playTone({ frequency: 392, type: 'square', start: 0, duration: 0.12, volume: 0.12 });
-  playTone({ frequency: 523, type: 'square', start: 0.12, duration: 0.13, volume: 0.12 });
-  playTone({ frequency: 659, type: 'triangle', start: 0.25, duration: 0.24, volume: 0.14 });
-  playTone({ frequency: 1046, type: 'square', start: 0.43, duration: 0.16, volume: 0.07 });
+  playTone({ frequency: 392, duration: 0.1, type: 'square', volume: 0.08 });
+  setTimeout(() => playTone({ frequency: 523, duration: 0.12, type: 'square', volume: 0.08 }), 90);
+  setTimeout(() => playTone({ frequency: 784, duration: 0.18, type: 'square', volume: 0.08 }), 180);
 }
 
 function playStageFailSound() {
-  if (!audio.enabled) return;
-  playTone({ frequency: 220, type: 'sawtooth', start: 0, duration: 0.28, volume: 0.18, detuneEnd: 110 });
-  playTone({ frequency: 110, type: 'square', start: 0.12, duration: 0.36, volume: 0.18, detuneEnd: 55 });
-  playTone({ frequency: 55, type: 'triangle', start: 0.38, duration: 0.55, volume: 0.16, detuneEnd: 32 });
+  playTone({ frequency: 180, slideTo: 90, duration: 0.45, type: 'triangle', volume: 0.12 });
+  setTimeout(() => playTone({ frequency: 100, slideTo: 55, duration: 0.35, type: 'sawtooth', volume: 0.08 }), 130);
 }
 
-function playUpgradeHoverSound() {
-  if (!audio.enabled) return;
-  playTone({ frequency: 740, type: 'square', start: 0, duration: 0.045, volume: 0.045, detuneEnd: 620 });
-  playTone({ frequency: 370, type: 'triangle', start: 0.015, duration: 0.06, volume: 0.03, detuneEnd: 330 });
+function playHoverSound() {
+  playTone({ frequency: 620, duration: 0.045, type: 'square', volume: 0.035 });
 }
 
-function playUpgradeSelectSound() {
-  if (!audio.enabled) return;
-  playTone({ frequency: 330, type: 'square', start: 0, duration: 0.08, volume: 0.08 });
-  playTone({ frequency: 494, type: 'square', start: 0.09, duration: 0.08, volume: 0.08 });
-  playTone({ frequency: 660, type: 'triangle', start: 0.18, duration: 0.18, volume: 0.09 });
+function playSelectSound() {
+  playTone({ frequency: 720, duration: 0.08, type: 'square', volume: 0.06 });
 }
 
-const upgrades = [
-  { name: '최대 체력 +1', desc: '최대 HP가 1 증가하고 체력을 1 회복합니다.', apply: () => { player.maxHp += 1; player.hp = Math.min(player.maxHp, player.hp + 1); } },
-  { name: '이동속도 +15%', desc: '탄막을 피하기 쉬워집니다.', apply: () => { player.speed *= 1.15; } },
-  { name: '피격 무적 +0.4초', desc: '맞은 직후 무적 시간이 길어집니다.', apply: () => { player.invincibleBonus = (player.invincibleBonus || 0) + 0.4; } },
-  { name: '체력 2 회복', desc: '현재 HP를 2 회복합니다.', apply: () => { player.hp = Math.min(player.maxHp, player.hp + 2); } },
-  { name: '크기 감소', desc: '플레이어 충돌 범위가 작아집니다.', apply: () => { player.radius = Math.max(8, player.radius - 2); } },
-];
+function playSaveSound() {
+  playTone({ frequency: 523, duration: 0.08, type: 'square', volume: 0.06 });
+  setTimeout(() => playTone({ frequency: 659, duration: 0.08, type: 'square', volume: 0.06 }), 80);
+}
+
+function startAmbience() {
+  stopAmbience();
+  if (!audio.enabled) return;
+  resumeAudio();
+
+  audio.ambienceTimer = setInterval(() => {
+    if (gameState === 'playing' || gameState === 'upgrade') {
+      const base = Math.random() > 0.5 ? 196 : 220;
+      playTone({ frequency: base, slideTo: base * 0.72, duration: 0.65, type: 'triangle', volume: 0.025 });
+      setTimeout(() => playTone({ frequency: base / 2, duration: 0.35, type: 'sine', volume: 0.018 }), 220);
+    }
+  }, 850);
+}
+
+function stopAmbience() {
+  if (audio.ambienceTimer) {
+    clearInterval(audio.ambienceTimer);
+    audio.ambienceTimer = null;
+  }
+}
 
 function resetGame() {
-  Object.assign(player, { x: canvas.width / 2, y: canvas.height - 80, radius: 14, hp: 3, maxHp: 3, speed: 260, invincible: 0, invincibleBonus: 0 });
+  player.x = canvas.width / 2;
+  player.y = canvas.height - 80;
+  player.radius = 14;
+  player.hp = 3;
+  player.maxHp = 3;
+  player.speed = 260;
+  player.invincible = 0;
+  player.invincibleBonus = 0;
+
   bullets = [];
   wave = 1;
   score = 0;
@@ -198,27 +210,35 @@ function resetGame() {
   bulletTimer = 0;
   waveTimer = waveDuration;
   scoreTimer = 0;
+  rankSavedThisRun = false;
+  finalWaveText.textContent = FINAL_WAVE;
   updateHud();
 }
 
 function startGame() {
   resumeAudio();
-  startHauntedMusicLoop();
   resetGame();
   gameState = 'playing';
   startPanel.classList.add('hidden');
   upgradePanel.classList.add('hidden');
   gameOverPanel.classList.add('hidden');
+  rankForm.classList.add('hidden');
   lastTime = performance.now();
   cancelAnimationFrame(animationId);
+  startAmbience();
   animationId = requestAnimationFrame(gameLoop);
 }
 
 function nextWave() {
-  playStageClearSound();
-  gameState = 'upgrade';
   bullets = [];
-  stopHauntedMusicLoop();
+
+  if (wave >= FINAL_WAVE) {
+    endGame(true);
+    return;
+  }
+
+  gameState = 'upgrade';
+  playStageClearSound();
   showUpgradePanel();
 }
 
@@ -234,58 +254,80 @@ function applyWaveDifficulty() {
 
 function showUpgradePanel() {
   upgradeCards.innerHTML = '';
-  [...upgrades].sort(() => Math.random() - 0.5).slice(0, 3).forEach((upgrade) => {
-    const card = document.createElement('div');
+  const picked = [...upgrades].sort(() => Math.random() - 0.5).slice(0, 3);
+
+  picked.forEach((upgrade) => {
+    const card = document.createElement('button');
+    card.type = 'button';
     card.className = 'upgrade-card';
-    card.tabIndex = 0;
     card.innerHTML = `<h3>${upgrade.name}</h3><p>${upgrade.desc}</p>`;
-    card.addEventListener('mouseenter', playUpgradeHoverSound);
-    card.addEventListener('focus', playUpgradeHoverSound);
+    card.addEventListener('mouseenter', playHoverSound);
+    card.addEventListener('focus', playHoverSound);
     card.addEventListener('click', () => {
-      playUpgradeSelectSound();
+      playSelectSound();
       upgrade.apply();
       applyWaveDifficulty();
       updateHud();
       upgradePanel.classList.add('hidden');
       gameState = 'playing';
-      startHauntedMusicLoop();
       lastTime = performance.now();
       animationId = requestAnimationFrame(gameLoop);
     });
     upgradeCards.appendChild(card);
   });
+
   upgradePanel.classList.remove('hidden');
 }
 
 function spawnPattern() {
-  if (wave % 3 === 0) spawnSpiralBullets();
-  else if (wave % 2 === 0) spawnAimedBullets();
-  else spawnCircleBullets();
+  if (wave % 3 === 0) {
+    spawnSpiralBullets();
+  } else if (wave % 2 === 0) {
+    spawnAimedBullets();
+  } else {
+    spawnCircleBullets();
+  }
 }
 
 function spawnCircleBullets() {
   const angleOffset = Math.random() * Math.PI * 2;
-  for (let i = 0; i < bulletCount; i++) createBullet(angleOffset + (Math.PI * 2 * i) / bulletCount, bulletSpeed);
+
+  for (let i = 0; i < bulletCount; i++) {
+    const angle = angleOffset + (Math.PI * 2 * i) / bulletCount;
+    createBullet(angle, bulletSpeed);
+  }
 }
 
 function spawnAimedBullets() {
   const baseAngle = Math.atan2(player.y - boss.y, player.x - boss.x);
   const spread = 0.55;
   const count = Math.min(9, 3 + Math.floor(wave / 2));
+
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0 : i / (count - 1);
-    createBullet(baseAngle - spread / 2 + spread * t, bulletSpeed + 30);
+    const angle = baseAngle - spread / 2 + spread * t;
+    createBullet(angle, bulletSpeed + 30);
   }
 }
 
 function spawnSpiralBullets() {
   const baseAngle = performance.now() / 600;
   const count = Math.min(14, bulletCount);
-  for (let i = 0; i < count; i++) createBullet(baseAngle + (Math.PI * 2 * i) / count, bulletSpeed + 20);
+
+  for (let i = 0; i < count; i++) {
+    const angle = baseAngle + (Math.PI * 2 * i) / count;
+    createBullet(angle, bulletSpeed + 20);
+  }
 }
 
 function createBullet(angle, speed) {
-  bullets.push({ x: boss.x, y: boss.y + 18, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, radius: 7 });
+  bullets.push({
+    x: boss.x,
+    y: boss.y,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    radius: 7,
+  });
 }
 
 function update(dt) {
@@ -297,38 +339,81 @@ function update(dt) {
   waveTimer -= dt;
   scoreTimer += dt;
 
-  if (bulletTimer >= fireInterval) { bulletTimer = 0; spawnPattern(); }
-  if (scoreTimer >= 0.25) { scoreTimer = 0; score += 1; }
-  if (player.invincible > 0) player.invincible -= dt;
-  if (waveTimer <= 0) { score += wave * 25; nextWave(); }
+  if (bulletTimer >= fireInterval) {
+    bulletTimer = 0;
+    spawnPattern();
+  }
+
+  if (scoreTimer >= 0.25) {
+    scoreTimer = 0;
+    score += 1;
+  }
+
+  if (player.invincible > 0) {
+    player.invincible -= dt;
+  }
+
+  if (waveTimer <= 0) {
+    score += wave * 25;
+    nextWave();
+  }
+
   updateHud();
 }
 
 function updatePlayer(dt) {
-  let dx = 0, dy = 0;
+  let dx = 0;
+  let dy = 0;
+
   if (keys.ArrowLeft || keys.a || keys.A) dx -= 1;
   if (keys.ArrowRight || keys.d || keys.D) dx += 1;
   if (keys.ArrowUp || keys.w || keys.W) dy -= 1;
   if (keys.ArrowDown || keys.s || keys.S) dy += 1;
-  if (dx || dy) { const len = Math.hypot(dx, dy); dx /= len; dy /= len; }
-  player.x = clamp(player.x + dx * player.speed * dt, player.radius, canvas.width - player.radius);
-  player.y = clamp(player.y + dy * player.speed * dt, player.radius, canvas.height - player.radius);
+
+  if (dx !== 0 || dy !== 0) {
+    const length = Math.hypot(dx, dy);
+    dx /= length;
+    dy /= length;
+  }
+
+  player.x += dx * player.speed * dt;
+  player.y += dy * player.speed * dt;
+
+  player.x = clamp(player.x, player.radius, canvas.width - player.radius);
+  player.y = clamp(player.y, player.radius, canvas.height - player.radius);
 }
 
 function updateBullets(dt) {
-  bullets.forEach((bullet) => { bullet.x += bullet.vx * dt; bullet.y += bullet.vy * dt; });
-  bullets = bullets.filter((b) => b.x > -40 && b.x < canvas.width + 40 && b.y > -40 && b.y < canvas.height + 40);
+  bullets.forEach((bullet) => {
+    bullet.x += bullet.vx * dt;
+    bullet.y += bullet.vy * dt;
+  });
+
+  bullets = bullets.filter((bullet) => {
+    return (
+      bullet.x > -40 &&
+      bullet.x < canvas.width + 40 &&
+      bullet.y > -40 &&
+      bullet.y < canvas.height + 40
+    );
+  });
 }
 
 function checkCollisions() {
   if (player.invincible > 0) return;
+
   for (const bullet of bullets) {
-    if (Math.hypot(player.x - bullet.x, player.y - bullet.y) < player.radius + bullet.radius) {
+    const distance = Math.hypot(player.x - bullet.x, player.y - bullet.y);
+
+    if (distance < player.radius + bullet.radius) {
       player.hp -= 1;
-      playHitSound();
       player.invincible = 1.1 + (player.invincibleBonus || 0);
       bullets = bullets.filter((item) => item !== bullet);
-      if (player.hp <= 0) endGame(false);
+      playHitSound();
+
+      if (player.hp <= 0) {
+        endGame(false);
+      }
       return;
     }
   }
@@ -343,60 +428,68 @@ function draw() {
 }
 
 function drawArena() {
-  const gradient = ctx.createRadialGradient(canvas.width / 2, 120, 40, canvas.width / 2, 260, 520);
-  gradient.addColorStop(0, '#261017');
-  gradient.addColorStop(0.48, '#0d0b12');
-  gradient.addColorStop(1, '#050507');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.strokeStyle = 'rgba(255, 40, 40, 0.08)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
   ctx.lineWidth = 1;
-  for (let x = 0; x < canvas.width; x += 45) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-  for (let y = 0; y < canvas.height; y += 45) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+
+  for (let x = 0; x < canvas.width; x += 45) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+
+  for (let y = 0; y < canvas.height; y += 45) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
 }
 
-function pixelRect(cx, cy, x, y, w, h, color, scale = boss.scale) {
+function drawPixelRect(x, y, w, h, color) {
   ctx.fillStyle = color;
-  ctx.fillRect(cx + x * scale, cy + y * scale, w * scale, h * scale);
+  ctx.fillRect(Math.round(x), Math.round(y), w, h);
 }
 
 function drawBoss() {
-  const s = boss.scale;
-  const cx = boss.x - 10 * s;
-  const cy = boss.y - 8 * s;
-  const bob = Math.round(Math.sin(performance.now() / 300) * 1) * s;
+  const x = boss.x;
+  const y = boss.y;
+  const pulse = Math.sin(performance.now() / 180) * 2;
 
-  ctx.shadowColor = 'rgba(255, 0, 0, 0.7)';
-  ctx.shadowBlur = 22;
-  pixelRect(cx, cy + bob, 3, 0, 3, 3, '#8f1010');
-  pixelRect(cx, cy + bob, 14, 0, 3, 3, '#8f1010');
-  pixelRect(cx, cy + bob, 2, 2, 4, 2, '#d01b1b');
-  pixelRect(cx, cy + bob, 14, 2, 4, 2, '#d01b1b');
-  pixelRect(cx, cy + bob, 6, 3, 8, 2, '#191015');
-  pixelRect(cx, cy + bob, 5, 5, 10, 7, '#c01818');
-  pixelRect(cx, cy + bob, 4, 7, 12, 6, '#7a0c0c');
-  pixelRect(cx, cy + bob, 2, 8, 3, 3, '#191015');
-  pixelRect(cx, cy + bob, 15, 8, 3, 3, '#191015');
-  pixelRect(cx, cy + bob, 7, 7, 2, 2, '#ffdf64');
-  pixelRect(cx, cy + bob, 11, 7, 2, 2, '#ffdf64');
-  pixelRect(cx, cy + bob, 8, 11, 4, 1, '#050507');
-  pixelRect(cx, cy + bob, 8, 13, 2, 3, '#2a0505');
-  pixelRect(cx, cy + bob, 11, 13, 2, 3, '#2a0505');
-  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255, 0, 50, 0.14)';
+  ctx.beginPath();
+  ctx.arc(x, y + 6, 72 + pulse * 3, 0, Math.PI * 2);
+  ctx.fill();
 
-  ctx.fillStyle = '#ffd9d2';
-  ctx.font = 'bold 18px monospace';
+  drawPixelRect(x - 56, y - 42, 20, 18, '#1a0508');
+  drawPixelRect(x + 36, y - 42, 20, 18, '#1a0508');
+  drawPixelRect(x - 68, y - 60, 16, 16, '#7c0712');
+  drawPixelRect(x + 52, y - 60, 16, 16, '#7c0712');
+  drawPixelRect(x - 42, y - 34, 84, 68, '#8e0e18');
+  drawPixelRect(x - 30, y - 22, 60, 48, '#1a0508');
+  drawPixelRect(x - 20, y - 10, 12, 12, '#ff3030');
+  drawPixelRect(x + 8, y - 10, 12, 12, '#ff3030');
+  drawPixelRect(x - 18, y + 14, 36, 8, '#d6d6d6');
+  drawPixelRect(x - 10, y + 14, 4, 10, '#050505');
+  drawPixelRect(x + 6, y + 14, 4, 10, '#050505');
+  drawPixelRect(x - 50, y + 22, 18, 28, '#1a0508');
+  drawPixelRect(x + 32, y + 22, 18, 28, '#1a0508');
+
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 18px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(`DEMON Lv.${wave}`, boss.x, boss.y - 62);
+  ctx.fillText(`DEMON Lv.${wave}`, boss.x, boss.y - 78);
 }
 
 function drawPlayer() {
-  if (player.invincible > 0 && Math.floor(performance.now() / 90) % 2 === 0) return;
+  const blink = player.invincible > 0 && Math.floor(performance.now() / 90) % 2 === 0;
+  if (blink) return;
+
   ctx.beginPath();
   ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
   ctx.fillStyle = '#74f0ff';
   ctx.fill();
+
   ctx.strokeStyle = 'white';
   ctx.lineWidth = 2;
   ctx.stroke();
@@ -406,14 +499,8 @@ function drawBullets() {
   bullets.forEach((bullet) => {
     ctx.beginPath();
     ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#ff3b30';
+    ctx.fillStyle = '#ffd166';
     ctx.fill();
-    ctx.shadowColor = 'rgba(255, 0, 0, 0.65)';
-    ctx.shadowBlur = 10;
-    ctx.strokeStyle = '#ffd166';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
   });
 }
 
@@ -425,32 +512,121 @@ function updateHud() {
 }
 
 function endGame(isWin) {
-  if (!isWin) playStageFailSound();
   gameState = 'over';
-  stopHauntedMusicLoop();
   cancelAnimationFrame(animationId);
-  resultTitle.textContent = isWin ? 'Victory!' : 'Game Over';
-  resultText.textContent = `도달 웨이브: ${wave} / 최종 점수: ${score}`;
+  stopAmbience();
+
+  resultTitle.textContent = isWin ? 'Ending Clear!' : 'Game Over';
+  resultText.textContent = `도달 웨이브: ${wave}/${FINAL_WAVE} / 최종 점수: ${score}`;
+
+  if (isWin) {
+    playStageClearSound();
+    rankForm.classList.remove('hidden');
+    nicknameInput.value = '';
+    setTimeout(() => nicknameInput.focus(), 100);
+  } else {
+    playStageFailSound();
+    rankForm.classList.add('hidden');
+  }
+
+  renderRankings();
   gameOverPanel.classList.remove('hidden');
+}
+
+function getRankings() {
+  const saved = localStorage.getItem(RANKING_KEY);
+  if (!saved) return [];
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveRanking(nickname) {
+  const cleanName = nickname.trim().slice(0, 12) || '이름없는 도전자';
+  const rankings = getRankings();
+
+  rankings.push({
+    name: cleanName,
+    score,
+    wave,
+    date: new Date().toLocaleDateString('ko-KR'),
+  });
+
+  rankings.sort((a, b) => b.score - a.score || b.wave - a.wave);
+  localStorage.setItem(RANKING_KEY, JSON.stringify(rankings.slice(0, 10)));
+}
+
+function renderRankings() {
+  const rankings = getRankings();
+  rankingList.innerHTML = '';
+
+  if (rankings.length === 0) {
+    const emptyItem = document.createElement('li');
+    emptyItem.textContent = '아직 저장된 플레이 로그가 없습니다.';
+    rankingList.appendChild(emptyItem);
+    return;
+  }
+
+  rankings.forEach((rank) => {
+    const item = document.createElement('li');
+    item.innerHTML = `<strong>${rank.name}</strong> — ${rank.score}점 <span class="rank-meta">/ Wave ${rank.wave} / ${rank.date}</span>`;
+    rankingList.appendChild(item);
+  });
 }
 
 function gameLoop(currentTime) {
   if (gameState !== 'playing') return;
+
   const dt = Math.min((currentTime - lastTime) / 1000, 0.033);
   lastTime = currentTime;
+
   update(dt);
   draw();
+
   animationId = requestAnimationFrame(gameLoop);
 }
 
-function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
 
-window.addEventListener('keydown', (event) => { keys[event.key] = true; });
-window.addEventListener('keyup', (event) => { keys[event.key] = false; });
-soundButton.addEventListener('click', () => { resumeAudio(); setSoundEnabled(!audio.enabled); });
+window.addEventListener('keydown', (event) => {
+  keys[event.key] = true;
+});
+
+window.addEventListener('keyup', (event) => {
+  keys[event.key] = false;
+});
+
 startButton.addEventListener('click', startGame);
 restartButton.addEventListener('click', startGame);
 
-setSoundEnabled(true);
+soundButton.addEventListener('click', () => {
+  audio.enabled = !audio.enabled;
+  setSoundButtonText();
+  if (audio.enabled && (gameState === 'playing' || gameState === 'upgrade')) {
+    startAmbience();
+  } else {
+    stopAmbience();
+  }
+});
+
+rankForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (rankSavedThisRun) return;
+
+  saveRanking(nicknameInput.value);
+  rankSavedThisRun = true;
+  rankForm.classList.add('hidden');
+  playSaveSound();
+  renderRankings();
+});
+
 resetGame();
+renderRankings();
+setSoundButtonText();
 draw();

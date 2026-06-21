@@ -22,7 +22,7 @@ const rankingList = document.getElementById('rankingList');
 
 const keys = {};
 const FINAL_WAVE = 7;
-const RANKING_KEY = 'rogueBossRankings';
+const RANKING_KEY = 'rogueBossPlayLogs';
 
 let gameState = 'ready';
 let lastTime = 0;
@@ -31,6 +31,7 @@ let waveTimer = 0;
 let scoreTimer = 0;
 let animationId = null;
 let rankSavedThisRun = false;
+let lastResultIsWin = false;
 
 const player = {
   x: canvas.width / 2,
@@ -211,6 +212,7 @@ function resetGame() {
   waveTimer = waveDuration;
   scoreTimer = 0;
   rankSavedThisRun = false;
+  lastResultIsWin = false;
   finalWaveText.textContent = FINAL_WAVE;
   updateHud();
 }
@@ -516,18 +518,20 @@ function endGame(isWin) {
   cancelAnimationFrame(animationId);
   stopAmbience();
 
+  lastResultIsWin = isWin;
   resultTitle.textContent = isWin ? 'Ending Clear!' : 'Game Over';
-  resultText.textContent = `도달 웨이브: ${wave}/${FINAL_WAVE} / 최종 점수: ${score}`;
+  resultText.textContent = `결과: ${isWin ? '엔딩 클리어' : '게임오버'} / 도달 웨이브: ${wave}/${FINAL_WAVE} / 최종 점수: ${score}`;
 
   if (isWin) {
     playStageClearSound();
-    rankForm.classList.remove('hidden');
-    nicknameInput.value = '';
-    setTimeout(() => nicknameInput.focus(), 100);
   } else {
     playStageFailSound();
-    rankForm.classList.add('hidden');
   }
+
+  rankSavedThisRun = false;
+  rankForm.classList.remove('hidden');
+  nicknameInput.value = '';
+  setTimeout(() => nicknameInput.focus(), 100);
 
   renderRankings();
   gameOverPanel.classList.remove('hidden');
@@ -553,10 +557,14 @@ function saveRanking(nickname) {
     name: cleanName,
     score,
     wave,
-    date: new Date().toLocaleDateString('ko-KR'),
+    result: lastResultIsWin ? 'CLEAR' : 'FAIL',
+    date: new Date().toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
   });
 
-  rankings.sort((a, b) => b.score - a.score || b.wave - a.wave);
+  rankings.sort((a, b) => {
+    const clearDiff = Number(b.result === 'CLEAR') - Number(a.result === 'CLEAR');
+    return clearDiff || b.wave - a.wave || b.score - a.score;
+  });
   localStorage.setItem(RANKING_KEY, JSON.stringify(rankings.slice(0, 10)));
 }
 
@@ -573,7 +581,8 @@ function renderRankings() {
 
   rankings.forEach((rank) => {
     const item = document.createElement('li');
-    item.innerHTML = `<strong>${rank.name}</strong> — ${rank.score}점 <span class="rank-meta">/ Wave ${rank.wave} / ${rank.date}</span>`;
+    const resultLabel = rank.result === 'CLEAR' ? '엔딩 클리어' : '게임오버';
+    item.innerHTML = `<strong>${rank.name}</strong> — ${resultLabel} / Wave ${rank.wave} <span class="rank-meta">/ ${rank.score}점 / ${rank.date}</span>`;
     rankingList.appendChild(item);
   });
 }
@@ -602,8 +611,13 @@ window.addEventListener('keyup', (event) => {
   keys[event.key] = false;
 });
 
-startButton.addEventListener('click', startGame);
-restartButton.addEventListener('click', startGame);
+function handleStartClick(event) {
+  event.preventDefault();
+  startGame();
+}
+
+startButton.addEventListener('click', handleStartClick);
+restartButton.addEventListener('click', handleStartClick);
 
 soundButton.addEventListener('click', () => {
   audio.enabled = !audio.enabled;

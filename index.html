@@ -3,84 +3,119 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rogue Boss</title>
+  <title>악몽 탈출 : 별의 조각</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main class="game-wrap">
-    <section class="title-area">
-      <h1>ROGUE BOSS</h1>
-      <p>별을 모아 웨이브를 돌파하고, 무한모드에서 최고 기록에 도전하세요.</p>
+    <section class="title-area pixel-window">
+      <div class="window-bar">
+        <span>Nightmare_Escape.exe</span>
+        <div class="window-icons"><i></i><i></i><i></i></div>
+      </div>
+      <div class="title-content">
+        <h1>악몽 탈출 : 별의 조각</h1>
+        <p>별의 조각을 모아 꿈의 균열을 열고, 악몽의 탄막에서 깨어나세요.</p>
+      </div>
     </section>
 
-    <section class="hud">
-      <div>HP <span id="hpText">3</span></div>
-      <div>Wave <span id="waveText">1</span>/<span id="finalWaveText">∞</span></div>
-      <div>Chapter <span id="difficultyText">1단계</span></div>
-      <div>Time <span id="timeText">20</span>s</div>
-      <div>Score <span id="scoreText">0</span></div>
-      <div class="star-goal">Clear Star <span id="starText">0/3</span></div>
-      <button id="soundButton" class="sound-button" type="button">Sound ON</button>
+    <section class="mode-select pixel-window" aria-label="게임 모드 선택">
+      <button class="mode-button" type="button" data-label="1단계" data-start="1" data-end="4">1단계<br /><span>검은 구름</span></button>
+      <button class="mode-button" type="button" data-label="2단계" data-start="5" data-end="8">2단계<br /><span>초승달</span></button>
+      <button class="mode-button" type="button" data-label="3단계" data-start="9" data-end="12">3단계<br /><span>올빼미</span></button>
+      <button class="mode-button" type="button" data-label="4단계" data-start="13" data-end="16">4단계<br /><span>늑대인간</span></button>
+      <button class="mode-button" type="button" data-label="5단계" data-start="17" data-end="20">5단계<br /><span>뱀파이어</span></button>
+      <button class="mode-button mode-all active" type="button" data-label="무한모드" data-start="1" data-end="" data-infinite="true">무한모드<br /><span>Endless Dream</span></button>
     </section>
 
-    <section class="mode-select" aria-label="게임 모드 선택">
-      <button class="mode-button" type="button" data-label="1단계" data-start="1" data-end="4">1단계<br /><span>1~4 Wave</span></button>
-      <button class="mode-button" type="button" data-label="2단계" data-start="5" data-end="8">2단계<br /><span>5~8 Wave</span></button>
-      <button class="mode-button" type="button" data-label="3단계" data-start="9" data-end="12">3단계<br /><span>9~12 Wave</span></button>
-      <button class="mode-button" type="button" data-label="4단계" data-start="13" data-end="16">4단계<br /><span>13~16 Wave</span></button>
-      <button class="mode-button" type="button" data-label="5단계" data-start="17" data-end="20">5단계<br /><span>17~20 Wave</span></button>
-      <button class="mode-button mode-all active" type="button" data-label="무한모드" data-start="1" data-end="" data-infinite="true">무한모드<br /><span>Endless</span></button>
-    </section>
-
-    <section class="canvas-box">
-      <canvas id="gameCanvas" width="900" height="560"></canvas>
-
-      <div id="startPanel" class="panel lobby-panel">
-        <p class="lobby-kicker">MODE SELECTED</p>
-        <h2 id="startTitle">무한모드 로비</h2>
-        <p id="lobbyModeText" class="lobby-story">
-          붉은 균열이 끝없이 열리고 있습니다.<br />
-          별을 모아 다음 파동을 버티고, 가능한 한 오래 살아남아 랭킹에 도전하세요.
-        </p>
-        <div class="rule-box">
-          <strong>클리어 조건</strong>
-          <span>웨이브 종료 전 별 3개 이상 획득</span>
-          <span>4번째 별부터 즉시 +50 보너스 점수</span>
-          <span>별은 일정 시간마다 1개씩 생성되며, 새 별이 나와도 기존 별은 사라지지 않습니다.</span>
-        </div>
-        <button id="startButton" type="button">시작하기</button>
+    <section class="canvas-box pixel-window">
+      <div class="window-bar game-window-bar">
+        <span>Dream_Battle_Field</span>
+        <div class="window-icons"><i></i><i></i><i></i></div>
       </div>
 
-      <div id="upgradePanel" class="panel hidden">
-        <h2>업그레이드 선택</h2>
-        <p>웨이브를 클리어했습니다. 하나를 선택하세요.</p>
-        <div id="upgradeCards" class="upgrade-cards"></div>
-      </div>
+      <div class="game-screen">
+        <canvas id="gameCanvas" width="900" height="560"></canvas>
 
-      <div id="gameOverPanel" class="panel hidden">
-        <h2 id="resultTitle">Game Over</h2>
-        <p id="resultText"></p>
-
-        <form id="rankForm" class="rank-form hidden">
-          <label for="nicknameInput">무한모드 종료! 닉네임을 남겨 랭킹에 기록하세요.</label>
-          <div class="rank-input-row">
-            <input id="nicknameInput" type="text" maxlength="12" placeholder="닉네임 입력" autocomplete="off" />
-            <button type="submit">기록 저장</button>
+        <section class="game-hud" aria-label="게임 정보">
+          <div class="hud-top-left">WAVE <span id="waveText">1-1</span></div>
+          <div class="hud-top-center"><span id="timeText">20</span>s</div>
+          <div class="hud-top-right">SCORE <span id="scoreText">0</span></div>
+          <div class="hud-bottom-left">HP <span id="hpText">♥♥♥</span></div>
+          <div class="hud-stage">현재 악몽 <span id="difficultyText">1단계</span><span id="finalWaveText" class="visually-hidden">∞</span></div>
+          <div class="hud-objective">
+            <strong>목적</strong> 악몽에서 벗어나기<br />
+            <strong>목표</strong> 별의 조각 <span id="starText">0/3</span>개를 모아 꿈의 균열 열기
           </div>
-        </form>
+        </section>
 
-        <div class="ranking-box">
-          <h3>무한모드 TOP 10 랭킹</h3>
-          <ol id="rankingList" class="ranking-list"></ol>
+        <div id="startPanel" class="panel lobby-panel">
+          <p class="lobby-kicker">MODE SELECTED</p>
+          <h2 id="startTitle">무한모드 로비</h2>
+          <p id="lobbyModeText" class="lobby-story">
+            당신은 반복되는 악몽에 갇혔습니다.<br />
+            악몽 속에서는 시간이 흐를수록 공포가 강해지고, 각 악몽의 지배자가 탄막으로 당신을 공격합니다.<br />
+            별의 조각 3개를 모으면 꿈의 균열이 열리고 다음 단계로 이동할 수 있습니다.
+          </p>
+          <div class="rule-box">
+            <strong>클리어 조건</strong>
+            <span>웨이브 종료 전 별의 조각 3개 이상 획득</span>
+            <span>4번째 별부터 즉시 +50 보너스 점수</span>
+            <span>별은 일정 시간마다 1개씩 생성되며, 새 별이 나와도 기존 별은 사라지지 않습니다.</span>
+          </div>
+          <button id="startButton" type="button">게임 시작</button>
         </div>
 
-        <button id="restartButton" type="button">로비로 돌아가기</button>
+        <div id="upgradePanel" class="panel hidden">
+          <h2>꿈의 균열이 열렸습니다.</h2>
+          <p>다음 악몽으로 들어가기 전, 하나의 힘을 선택하세요.</p>
+          <div id="upgradeCards" class="upgrade-cards"></div>
+        </div>
+
+        <div id="gameOverPanel" class="panel hidden">
+          <h2 id="resultTitle">악몽에 잠식되었습니다</h2>
+          <p id="resultText"></p>
+
+          <form id="rankForm" class="rank-form hidden">
+            <label for="nicknameInput">무한모드 종료! 닉네임을 남겨 랭킹에 기록하세요.</label>
+            <div class="rank-input-row">
+              <input id="nicknameInput" type="text" maxlength="12" placeholder="닉네임 입력" autocomplete="off" />
+              <button type="submit">기록 저장</button>
+            </div>
+          </form>
+
+          <div class="ranking-box">
+            <h3>무한모드 TOP 10 랭킹</h3>
+            <ol id="rankingList" class="ranking-list"></ol>
+          </div>
+
+          <button id="restartButton" type="button">로비로 돌아가기</button>
+        </div>
       </div>
     </section>
 
-    <section class="guide">
-      <strong>조작:</strong> WASD / 방향키 이동<br />
-      <strong>목표:</strong> 웨이브마다 별 3개 이상 수집 + 무한모드 최고 기록 도전
+    <section class="guide pixel-window">
+      <div class="window-bar"><span>Guide.txt</span></div>
+      <div class="guide-content">
+        <p><strong>조작</strong> WASD / 방향키 이동</p>
+        <p><strong>목표</strong> 웨이브마다 별의 조각 3개 이상 수집</p>
+        <p><strong>무한모드</strong> 가능한 한 오래 살아남아 최고 기록 도전</p>
+      </div>
+
+      <div class="sound-control">
+        <button id="soundButton" class="sound-button" type="button">SOUND ON</button>
+        <label for="volumeSlider">VOLUME</label>
+        <input id="volumeSlider" type="range" min="0" max="100" value="70" />
+      </div>
+    </section>
+
+    <section class="lobby-ranking pixel-window">
+      <div class="window-bar"><span>Endless_Ranking.dat</span></div>
+      <div class="ranking-box lobby-ranking-box">
+        <h3>게임 시작 전 무한모드 TOP 10</h3>
+        <ol id="lobbyRankingList" class="ranking-list"></ol>
+        <p class="ranking-note">※ 플레이 이후 이름으로 점수 기록을 남기는 기능은 무한모드에서만 가능합니다.</p>
+      </div>
     </section>
   </main>
 

@@ -24,6 +24,8 @@ const resultText = document.getElementById('resultText');
 const rankForm = document.getElementById('rankForm');
 const nicknameInput = document.getElementById('nicknameInput');
 const rankingList = document.getElementById('rankingList');
+const lobbyRankingList = document.getElementById('lobbyRankingList');
+const volumeSlider = document.getElementById('volumeSlider');
 
 const keys = {};
 const FINAL_WAVE = 20;
@@ -128,6 +130,7 @@ const audio = {
   ctx: null,
   enabled: true,
   ambienceTimer: null,
+  volume: 0.7,
 };
 
 function initAudio() {
@@ -141,7 +144,7 @@ function resumeAudio() {
 }
 
 function setSoundButtonText() {
-  soundButton.textContent = audio.enabled ? 'Sound ON' : 'Sound OFF';
+  soundButton.textContent = audio.enabled ? 'SOUND ON' : 'SOUND OFF';
 }
 
 function playTone({ frequency = 440, duration = 0.2, type = 'square', volume = 0.08, slideTo = null }) {
@@ -157,7 +160,7 @@ function playTone({ frequency = 440, duration = 0.2, type = 'square', volume = 0
   if (slideTo) oscillator.frequency.exponentialRampToValueAtTime(slideTo, now + duration);
 
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(volume, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(volume * audio.volume, now + 0.02);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
   oscillator.connect(gain);
@@ -231,7 +234,7 @@ function getDifficultyInfo(targetWave = wave) {
   const stageData = {
     1: { name: '1단계', pattern: '기본 탄막', color: '#74f0ff', waveDuration: 18, speedBonus: 0, countBonus: 0, intervalBonus: 0 },
     2: { name: '2단계', pattern: '추격 + 회전', color: '#ffd166', waveDuration: 19, speedBonus: 24, countBonus: 2, intervalBonus: -0.08 },
-    3: { name: '3단계', pattern: '혼합 + 경고 장판', color: '#ff9f1c', waveDuration: 20, speedBonus: 48, countBonus: 4, intervalBonus: -0.16 },
+    3: { name: '3단계', pattern: '올빼미의 응시', color: '#d87cff', waveDuration: 20, speedBonus: 48, countBonus: 4, intervalBonus: -0.16 },
     4: { name: '4단계', pattern: '폭죽 2차 탄막', color: '#ff4d6d', waveDuration: 21, speedBonus: 72, countBonus: 5, intervalBonus: -0.24 },
     5: { name: '5단계', pattern: '가로/세로 레이저', color: '#ff1b1c', waveDuration: 23, speedBonus: 96, countBonus: 6, intervalBonus: -0.32 },
   };
@@ -241,7 +244,7 @@ function getDifficultyInfo(targetWave = wave) {
     stage,
     stageWave,
     isBoss: bossWave,
-    bossName: bossWave ? `CHAPTER ${stage} BOSS` : `Chapter ${stage}-${stageWave}`,
+    bossName: bossWave ? ['','검은 구름','초승달','올빼미','늑대인간','뱀파이어'][stage] : `악몽 ${stage}-${stageWave}`, 
   };
 }
 
@@ -777,18 +780,28 @@ function draw() {
 }
 
 function drawArena() {
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
-  ctx.lineWidth = 1;
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, '#2a1238');
+  gradient.addColorStop(0.55, '#1a1028');
+  gradient.addColorStop(1, '#0b0712');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  for (let x = 0; x < canvas.width; x += 45) {
+  ctx.strokeStyle = 'rgba(255, 204, 102, 0.08)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < canvas.width; x += 32) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
   }
-  for (let y = 0; y < canvas.height; y += 45) {
+  for (let y = 0; y < canvas.height; y += 32) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
   }
 
+  ctx.fillStyle = 'rgba(255, 120, 180, 0.06)';
+  ctx.fillRect(0, 0, canvas.width, 68);
+  ctx.fillRect(0, canvas.height - 86, canvas.width, 86);
+
   if (isBossWave()) {
-    ctx.fillStyle = 'rgba(255, 40, 40, 0.08)';
+    ctx.fillStyle = 'rgba(192, 75, 127, 0.16)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 }
@@ -801,46 +814,120 @@ function drawPixelRect(x, y, w, h, color) {
 function drawBoss() {
   const x = boss.x;
   const y = boss.y;
-  const difficulty = getDifficultyInfo();
-  const pulse = Math.sin(performance.now() / 180) * 2;
+  const info = getDifficultyInfo();
+  const pulse = Math.sin(performance.now() / 180) * 3;
 
-  ctx.fillStyle = isEliteWave() ? 'rgba(255, 0, 50, 0.25)' : 'rgba(255, 0, 50, 0.14)';
+  ctx.fillStyle = info.isBoss ? 'rgba(255, 84, 148, 0.22)' : 'rgba(255, 204, 102, 0.10)';
   ctx.beginPath();
-  ctx.arc(x, y + 6, 72 + pulse * 3 + difficulty.stage * 3, 0, Math.PI * 2);
+  ctx.arc(x, y + 8, 70 + pulse + info.stage * 2, 0, Math.PI * 2);
   ctx.fill();
 
-  drawPixelRect(x - 56, y - 42, 20, 18, '#1a0508');
-  drawPixelRect(x + 36, y - 42, 20, 18, '#1a0508');
-  drawPixelRect(x - 68, y - 60, 16, 16, '#7c0712');
-  drawPixelRect(x + 52, y - 60, 16, 16, '#7c0712');
-  drawPixelRect(x - 42, y - 34, 84, 68, isEliteWave() ? '#c1121f' : '#8e0e18');
-  drawPixelRect(x - 30, y - 22, 60, 48, '#1a0508');
-  drawPixelRect(x - 20, y - 10, 12, 12, '#ff3030');
-  drawPixelRect(x + 8, y - 10, 12, 12, '#ff3030');
-  drawPixelRect(x - 18, y + 14, 36, 8, '#d6d6d6');
-  drawPixelRect(x - 10, y + 14, 4, 10, '#050505');
-  drawPixelRect(x + 6, y + 14, 4, 10, '#050505');
-  drawPixelRect(x - 50, y + 22, 18, 28, '#1a0508');
-  drawPixelRect(x + 32, y + 22, 18, 28, '#1a0508');
+  if (info.stage === 1) drawCloudBoss(x, y);
+  else if (info.stage === 2) drawMoonBoss(x, y);
+  else if (info.stage === 3) drawOwlBoss(x, y);
+  else if (info.stage === 4) drawWerewolfBoss(x, y);
+  else drawVampireBoss(x, y);
 
-  ctx.fillStyle = difficulty.color;
-  ctx.font = 'bold 18px Arial';
+  ctx.fillStyle = info.color;
+  ctx.font = 'bold 18px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(difficulty.bossName, boss.x, boss.y - 78);
+  ctx.fillText(info.bossName, boss.x, boss.y - 78);
+}
+
+function drawCloudBoss(x, y) {
+  drawPixelRect(x - 56, y - 22, 112, 44, '#101018');
+  drawPixelRect(x - 72, y - 10, 32, 32, '#101018');
+  drawPixelRect(x + 40, y - 10, 32, 32, '#101018');
+  drawPixelRect(x - 32, y - 42, 64, 32, '#181424');
+  drawPixelRect(x - 26, y - 4, 12, 12, '#ffcc66');
+  drawPixelRect(x + 14, y - 4, 12, 12, '#ffcc66');
+  drawPixelRect(x - 20, y + 20, 40, 8, '#4b1d5a');
+}
+
+function drawMoonBoss(x, y) {
+  drawPixelRect(x - 16, y - 56, 32, 112, '#ffcc66');
+  drawPixelRect(x + 4, y - 44, 34, 88, '#2a1238');
+  drawPixelRect(x - 10, y - 14, 8, 8, '#7d295d');
+  drawPixelRect(x - 2, y + 18, 22, 6, '#7d295d');
+}
+
+function drawOwlBoss(x, y) {
+  drawPixelRect(x - 46, y - 48, 92, 88, '#4b1d5a');
+  drawPixelRect(x - 60, y - 58, 28, 28, '#2a1238');
+  drawPixelRect(x + 32, y - 58, 28, 28, '#2a1238');
+  drawPixelRect(x - 34, y - 22, 24, 24, '#ffcc66');
+  drawPixelRect(x + 10, y - 22, 24, 24, '#ffcc66');
+  drawPixelRect(x - 25, y - 13, 8, 8, '#120812');
+  drawPixelRect(x + 19, y - 13, 8, 8, '#120812');
+  drawPixelRect(x - 6, y + 2, 12, 14, '#c04b7f');
+  drawPixelRect(x - 26, y + 28, 52, 8, '#2a1238');
+}
+
+function drawWerewolfBoss(x, y) {
+  drawPixelRect(x - 42, y - 46, 84, 86, '#3a2630');
+  drawPixelRect(x - 58, y - 58, 28, 30, '#1a1018');
+  drawPixelRect(x + 30, y - 58, 28, 30, '#1a1018');
+  drawPixelRect(x - 30, y - 16, 16, 16, '#ffcc66');
+  drawPixelRect(x + 14, y - 16, 16, 16, '#ffcc66');
+  drawPixelRect(x - 20, y - 8, 8, 8, '#08050a');
+  drawPixelRect(x + 16, y - 8, 8, 8, '#08050a');
+  drawPixelRect(x - 10, y + 8, 20, 12, '#c04b7f');
+  drawPixelRect(x - 22, y + 24, 44, 8, '#f5e1d8');
+}
+
+function drawVampireBoss(x, y) {
+  drawPixelRect(x - 48, y - 50, 96, 96, '#1a0b18');
+  drawPixelRect(x - 64, y - 62, 28, 34, '#2a1238');
+  drawPixelRect(x + 36, y - 62, 28, 34, '#2a1238');
+  drawPixelRect(x - 32, y - 20, 22, 18, '#ff3d7f');
+  drawPixelRect(x + 10, y - 20, 22, 18, '#ff3d7f');
+  drawPixelRect(x - 20, y + 12, 40, 8, '#f5e1d8');
+  drawPixelRect(x - 12, y + 12, 6, 16, '#ffffff');
+  drawPixelRect(x + 6, y + 12, 6, 16, '#ffffff');
+  drawPixelRect(x - 56, y + 30, 112, 22, '#7d295d');
 }
 
 function drawPlayer() {
   const blink = player.invincible > 0 && Math.floor(performance.now() / 90) % 2 === 0;
   if (blink) return;
 
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-  ctx.fillStyle = '#74f0ff';
-  ctx.fill();
+  const x = Math.round(player.x);
+  const y = Math.round(player.y);
+  const s = Math.max(2, Math.round(player.radius / 7));
 
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(x - 14 * s, y + 12 * s, 28 * s, 5 * s);
+
+  // pillow
+  drawPixelRect(x + 7 * s, y - 3 * s, 13 * s, 18 * s, '#fff4da');
+  drawPixelRect(x + 9 * s, y - 1 * s, 9 * s, 14 * s, '#ffd9ec');
+
+  // pajama body
+  drawPixelRect(x - 9 * s, y - 2 * s, 18 * s, 20 * s, '#7ec8ff');
+  drawPixelRect(x - 8 * s, y + 3 * s, 16 * s, 3 * s, '#416d9c');
+  drawPixelRect(x - 8 * s, y + 11 * s, 16 * s, 3 * s, '#416d9c');
+
+  // head and sleep cap
+  drawPixelRect(x - 8 * s, y - 18 * s, 16 * s, 14 * s, '#ffd6b3');
+  drawPixelRect(x - 10 * s, y - 23 * s, 18 * s, 7 * s, '#c04b7f');
+  drawPixelRect(x + 6 * s, y - 26 * s, 7 * s, 7 * s, '#ffcc66');
+
+  // face
+  drawPixelRect(x - 4 * s, y - 12 * s, 2 * s, 2 * s, '#2a1238');
+  drawPixelRect(x + 4 * s, y - 12 * s, 2 * s, 2 * s, '#2a1238');
+  drawPixelRect(x - 3 * s, y - 7 * s, 6 * s, 2 * s, '#7d295d');
+
+  // legs
+  drawPixelRect(x - 8 * s, y + 18 * s, 6 * s, 8 * s, '#7ec8ff');
+  drawPixelRect(x + 2 * s, y + 18 * s, 6 * s, 8 * s, '#7ec8ff');
+  drawPixelRect(x - 9 * s, y + 26 * s, 8 * s, 3 * s, '#fff4da');
+  drawPixelRect(x + 1 * s, y + 26 * s, 8 * s, 3 * s, '#fff4da');
+
+  ctx.font = 'bold 12px monospace';
+  ctx.fillStyle = '#ffcc66';
+  ctx.textAlign = 'center';
+  ctx.fillText('Zzz', x, y - 30);
 }
 
 function drawBullets() {
@@ -931,11 +1018,12 @@ function drawLasers() {
 }
 
 function updateHud() {
-  hpText.textContent = `${player.hp}/${player.maxHp}`;
-  waveText.textContent = wave;
+  hpText.textContent = '♥'.repeat(Math.max(0, player.hp)) + '♡'.repeat(Math.max(0, player.maxHp - player.hp));
+  const hudInfo = getDifficultyInfo();
+  waveText.textContent = `${hudInfo.stage}-${hudInfo.stageWave}`;
   timeText.textContent = Math.max(0, Math.ceil(waveTimer));
   scoreText.textContent = score;
-  const difficulty = getDifficultyInfo();
+  const difficulty = hudInfo;
   if (starText) {
     starText.textContent = `${Math.min(collectedStars, STAR_GOAL)}/${STAR_GOAL}`;
     starText.parentElement.classList.toggle('star-complete', collectedStars >= STAR_GOAL);
@@ -952,7 +1040,7 @@ function endGame(isWin) {
   stopAmbience();
 
   lastResultIsWin = isWin;
-  const resultName = isWin ? (currentRunIsInfinite ? '무한모드 종료' : '챕터 클리어') : '게임오버';
+  const resultName = isWin ? (currentRunIsInfinite ? '꿈의 균열이 열렸습니다' : '악몽에서 깨어났습니다') : '악몽에 잠식되었습니다';
   resultTitle.textContent = resultName;
   resultText.textContent = `모드: ${currentRunLabel} / 결과: ${resultName} / 도달 웨이브: ${wave}${currentRunIsInfinite ? '' : `/${currentRunEndWave}`} / 별: ${collectedStars}/${STAR_GOAL} / 최종 점수: ${score}`;
 
@@ -1003,20 +1091,24 @@ function saveRanking(nickname) {
 
 function renderRankings() {
   const rankings = getRankings();
-  rankingList.innerHTML = '';
+  const lists = [rankingList, lobbyRankingList].filter(Boolean);
 
-  if (rankings.length === 0) {
-    const emptyItem = document.createElement('li');
-    emptyItem.textContent = '아직 저장된 플레이 로그가 없습니다.';
-    rankingList.appendChild(emptyItem);
-    return;
-  }
+  lists.forEach((list) => {
+    list.innerHTML = '';
 
-  rankings.forEach((rank) => {
-    const item = document.createElement('li');
-    const resultLabel = rank.result === 'CLEAR' ? '클리어' : '게임오버';
-    item.innerHTML = `<strong>${rank.name}</strong> — ${resultLabel} / Wave ${rank.wave} <span class="rank-meta">/ ${rank.score}점 / ${rank.date}</span>`;
-    rankingList.appendChild(item);
+    if (rankings.length === 0) {
+      const emptyItem = document.createElement('li');
+      emptyItem.textContent = '아직 저장된 무한모드 기록이 없습니다.';
+      list.appendChild(emptyItem);
+      return;
+    }
+
+    rankings.forEach((rank) => {
+      const item = document.createElement('li');
+      const resultLabel = rank.result === 'CLEAR' ? '균열 발견' : '잠식';
+      item.innerHTML = `<strong>${rank.name}</strong> — ${rank.score}점 <span class="rank-meta">/ Wave ${rank.wave} / ${resultLabel} / ${rank.date}</span>`;
+      list.appendChild(item);
+    });
   });
 }
 
@@ -1061,8 +1153,8 @@ function showLobbyForMode(mode) {
   if (startTitle) startTitle.textContent = `${mode.label} 로비`;
   if (lobbyModeText) {
     lobbyModeText.innerHTML = mode.infinite
-      ? '붉은 균열이 끝없이 열리고 있습니다.<br />별을 모아 다음 파동을 버티고, 가능한 한 오래 살아남아 랭킹에 도전하세요.'
-      : `이 구간은 Wave ${mode.startWave}~${mode.endWave} 패턴을 익히는 훈련 챕터입니다.<br />별 3개를 모아 웨이브를 통과하고, 보스전까지 흐름을 연습하세요.`;
+      ? '당신은 반복되는 악몽에 갇혔습니다.<br />별의 조각을 모아 꿈의 균열을 열고, 끝없이 밀려오는 악몽에서 최대한 오래 버티세요.'
+      : `당신은 반복되는 악몽에 갇혔습니다.<br />이 구간은 Wave ${mode.startWave}~${mode.endWave} 악몽입니다. 별의 조각 3개를 모아 꿈의 균열을 열고 다음 악몽으로 이동하세요.`;
   }
 
   startPanel.classList.remove('hidden');
@@ -1099,6 +1191,13 @@ soundButton.addEventListener('click', () => {
   if (audio.enabled && (gameState === 'playing' || gameState === 'upgrade')) startAmbience();
   else stopAmbience();
 });
+
+
+if (volumeSlider) {
+  volumeSlider.addEventListener('input', () => {
+    audio.volume = Number(volumeSlider.value) / 100;
+  });
+}
 
 rankForm.addEventListener('submit', (event) => {
   event.preventDefault();

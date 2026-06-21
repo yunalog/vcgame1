@@ -8,6 +8,7 @@ const timeText = document.getElementById('timeText');
 const scoreText = document.getElementById('scoreText');
 const difficultyText = document.getElementById('difficultyText');
 const starText = document.getElementById('starText');
+const pillowText = document.getElementById('pillowText');
 const modeButtons = document.querySelectorAll('.mode-button');
 const startTitle = document.getElementById('startTitle');
 const lobbyModeText = document.getElementById('lobbyModeText');
@@ -34,6 +35,8 @@ const STAR_GOAL = 3;
 const MAX_STARS_PER_WAVE = 6;
 const STAR_BONUS_SCORE = 50;
 const STAR_SPAWN_INTERVAL = 3.2;
+const PILLOW_BASE_MAX = 3;
+const PILLOW_BASE_COOLDOWN = 0.45;
 
 let gameState = 'ready';
 let lastTime = 0;
@@ -42,6 +45,7 @@ let specialTimer = 0;
 let waveTimer = 0;
 let scoreTimer = 0;
 let starTimer = 0;
+let pillowCooldownTimer = 0;
 let animationId = null;
 let rankSavedThisRun = false;
 let lastResultIsWin = false;
@@ -59,6 +63,10 @@ const player = {
   speed: 260,
   invincible: 0,
   sleepText: 0,
+  pillows: PILLOW_BASE_MAX,
+  maxPillows: PILLOW_BASE_MAX,
+  pillowCooldown: PILLOW_BASE_COOLDOWN,
+  pillowRadius: 10,
 };
 
 const boss = {
@@ -80,6 +88,8 @@ let bulletSpeed = 145;
 let bulletCount = 8;
 let collectedStars = 0;
 let spawnedStarsThisWave = 0;
+let pillows = [];
+const mouse = { x: canvas.width / 2, y: canvas.height / 2, inside: false };
 
 const upgrades = [
   {
@@ -116,6 +126,28 @@ const upgrades = [
     desc: '플레이어 충돌 범위가 작아집니다.',
     apply: () => {
       player.radius = Math.max(6, player.radius - 1);
+    },
+  },
+  {
+    name: '베개 +1',
+    desc: '최대 베개 수가 1 증가하고 즉시 1개 회복합니다.',
+    apply: () => {
+      player.maxPillows += 1;
+      player.pillows = Math.min(player.maxPillows, player.pillows + 1);
+    },
+  },
+  {
+    name: '빠른 베개 던지기',
+    desc: '베개 발사 쿨타임이 20% 감소합니다.',
+    apply: () => {
+      player.pillowCooldown = Math.max(0.18, player.pillowCooldown * 0.8);
+    },
+  },
+  {
+    name: '큰 베개',
+    desc: '베개의 충돌 범위가 커져 탄막을 맞추기 쉬워집니다.',
+    apply: () => {
+      player.pillowRadius = Math.min(18, player.pillowRadius + 2);
     },
   },
   {
@@ -190,6 +222,8 @@ function playStarSound() {
   playTone({ frequency: 880, duration: 0.07, type: 'square', volume: 0.055 });
   setTimeout(() => playTone({ frequency: 1175, duration: 0.08, type: 'square', volume: 0.045 }), 60);
 }
+function playPillowSound() { playTone({ frequency: 520, slideTo: 760, duration: 0.09, type: 'triangle', volume: 0.055 }); }
+function playPillowHitSound() { playTone({ frequency: 980, slideTo: 620, duration: 0.08, type: 'square', volume: 0.05 }); }
 function playSpecialWarningSound() {
   playTone({ frequency: 260, slideTo: 170, duration: 0.2, type: 'square', volume: 0.07 });
 }
@@ -263,11 +297,16 @@ function resetGame(startWave = selectedMode.startWave, endWave = selectedMode.en
   player.invincible = 0;
   player.invincibleBonus = 0;
   player.sleepText = 0;
+  player.pillows = PILLOW_BASE_MAX;
+  player.maxPillows = PILLOW_BASE_MAX;
+  player.pillowCooldown = PILLOW_BASE_COOLDOWN;
+  player.pillowRadius = 10;
 
   bullets = [];
   lasers = [];
   dangerZones = [];
   stars = [];
+  pillows = [];
   floatingTexts = [];
   wave = startWave;
   score = 0;
@@ -303,7 +342,10 @@ function setWaveStats() {
   collectedStars = 0;
   spawnedStarsThisWave = 0;
   stars = [];
+  pillows = [];
   floatingTexts = [];
+  pillowCooldownTimer = 0;
+  player.pillows = player.maxPillows;
   spawnStar();
 }
 
@@ -326,6 +368,7 @@ function nextWave() {
   lasers = [];
   dangerZones = [];
   stars = [];
+  pillows = [];
   floatingTexts = [];
 
   if (!currentRunIsInfinite && wave >= currentRunEndWave) {
@@ -557,6 +600,7 @@ function update(dt) {
   updateLasers(dt);
   updateDangerZones(dt);
   updateStars(dt);
+  updatePillows(dt);
   updateFloatingTexts(dt);
   checkCollisions();
 
@@ -588,6 +632,7 @@ function update(dt) {
 
   if (player.invincible > 0) player.invincible -= dt;
   if (player.sleepText > 0) player.sleepText -= dt;
+  if (pillowCooldownTimer > 0) pillowCooldownTimer -= dt;
 
   if (waveTimer <= 0) {
     if (collectedStars < STAR_GOAL) {
@@ -702,6 +747,79 @@ function updateStars(dt) {
   });
 }
 
+function throwPillow() {
+  if (gameState !== 'playing') return;
+  if (player.pillows <= 0 || pillowCooldownTimer > 0) return;
+
+  const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  pillows.push({
+    x: player.x,
+    y: player.y,
+    vx: Math.cos(angle) * 520,
+    vy: Math.sin(angle) * 520,
+    radius: player.pillowRadius,
+    rotation: angle,
+    spin: 8,
+    life: 0.9,
+  });
+
+  player.pillows -= 1;
+  pillowCooldownTimer = player.pillowCooldown;
+  playPillowSound();
+  updateHud();
+}
+
+function updatePillows(dt) {
+  pillows.forEach((pillow) => {
+    pillow.x += pillow.vx * dt;
+    pillow.y += pillow.vy * dt;
+    pillow.rotation += pillow.spin * dt;
+    pillow.life -= dt;
+  });
+
+  pillows = pillows.filter((pillow) => (
+    pillow.life > 0 &&
+    pillow.x > -50 &&
+    pillow.x < canvas.width + 50 &&
+    pillow.y > -50 &&
+    pillow.y < canvas.height + 50 &&
+    !pillow.remove
+  ));
+}
+
+function checkPillowBulletCollisions() {
+  let hasHit = false;
+
+  for (const pillow of pillows) {
+    if (pillow.remove) continue;
+
+    for (const bullet of bullets) {
+      if (bullet.remove) continue;
+
+      const distance = Math.hypot(pillow.x - bullet.x, pillow.y - bullet.y);
+      if (distance < pillow.radius + bullet.radius) {
+        pillow.remove = true;
+        bullet.remove = true;
+        hasHit = true;
+        score += 3;
+        floatingTexts.push({
+          x: bullet.x + 8,
+          y: bullet.y - 8,
+          text: '+3',
+          life: 0.45,
+        });
+        playPillowHitSound();
+        break;
+      }
+    }
+  }
+
+  if (hasHit) {
+    bullets = bullets.filter((bullet) => !bullet.remove);
+    pillows = pillows.filter((pillow) => !pillow.remove);
+  }
+}
+
 function updateFloatingTexts(dt) {
   floatingTexts.forEach((text) => {
     text.y -= 42 * dt;
@@ -734,6 +852,7 @@ function checkStarCollisions() {
 
 function checkCollisions() {
   checkStarCollisions();
+  checkPillowBulletCollisions();
 
   if (player.invincible > 0) return;
 
@@ -785,6 +904,7 @@ function draw() {
   drawDangerZones();
   drawLasers();
   drawBullets();
+  drawPillows();
   drawStars();
   drawPlayer();
   drawFloatingTexts();
@@ -952,6 +1072,22 @@ function drawBullets() {
   });
 }
 
+function drawPillows() {
+  pillows.forEach((pillow) => {
+    ctx.save();
+    ctx.translate(pillow.x, pillow.y);
+    ctx.rotate(pillow.rotation);
+    ctx.fillStyle = '#fff4da';
+    ctx.fillRect(-pillow.radius * 1.35, -pillow.radius * 0.75, pillow.radius * 2.7, pillow.radius * 1.5);
+    ctx.fillStyle = '#ffd9ec';
+    ctx.fillRect(-pillow.radius * 0.95, -pillow.radius * 0.42, pillow.radius * 1.9, pillow.radius * 0.84);
+    ctx.strokeStyle = 'rgba(255,255,255,0.72)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-pillow.radius * 1.35, -pillow.radius * 0.75, pillow.radius * 2.7, pillow.radius * 1.5);
+    ctx.restore();
+  });
+}
+
 
 function drawStars() {
   stars.forEach((star) => {
@@ -1040,6 +1176,10 @@ function updateHud() {
   if (starText) {
     starText.textContent = `${Math.min(collectedStars, STAR_GOAL)}/${STAR_GOAL}`;
     starText.parentElement.classList.toggle('star-complete', collectedStars >= STAR_GOAL);
+  }
+
+  if (pillowText) {
+    pillowText.textContent = `${player.pillows}/${player.maxPillows}`;
   }
 
   if (difficultyText) {
@@ -1155,6 +1295,7 @@ function showLobbyForMode(mode) {
   lasers = [];
   dangerZones = [];
   stars = [];
+  pillows = [];
   floatingTexts = [];
   wave = mode.startWave;
   currentRunEndWave = mode.infinite ? null : mode.endWave;
@@ -1186,6 +1327,32 @@ modeButtons.forEach((button) => {
     showLobbyForMode(getModeFromButton(button));
   });
 });
+
+
+canvas.addEventListener('mousemove', (event) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  mouse.x = (event.clientX - rect.left) * scaleX;
+  mouse.y = (event.clientY - rect.top) * scaleY;
+  mouse.inside = true;
+});
+
+canvas.addEventListener('mouseenter', () => {
+  mouse.inside = true;
+});
+
+canvas.addEventListener('mouseleave', () => {
+  mouse.inside = false;
+});
+
+canvas.addEventListener('mousedown', (event) => {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  throwPillow();
+});
+
+canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
 window.addEventListener('keydown', (event) => { keys[event.key] = true; });
 window.addEventListener('keyup', (event) => { keys[event.key] = false; });

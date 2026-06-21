@@ -10,12 +10,13 @@
   <main class="game-wrap">
     <section class="title-area">
       <h1>ROGUE BOSS</h1>
-      <p>보스 탄막을 피하고, 웨이브마다 업그레이드를 선택해 살아남으세요.</p>
+      <p>보스 탄막을 피하고, 3단계 난이도와 고난도 보스를 넘어 살아남으세요.</p>
     </section>
 
     <section class="hud">
       <div>HP <span id="hpText">3</span></div>
-      <div>Wave <span id="waveText">1</span>/<span id="finalWaveText">7</span></div>
+      <div>Wave <span id="waveText">1</span>/<span id="finalWaveText">15</span></div>
+      <div>Difficulty <span id="difficultyText">1단계</span></div>
       <div>Time <span id="timeText">20</span>s</div>
       <div>Score <span id="scoreText">0</span></div>
       <button id="soundButton" class="sound-button" type="button">Sound ON</button>
@@ -26,7 +27,7 @@
 
       <div id="startPanel" class="panel">
         <h2>보스전 시작</h2>
-        <p>WASD 또는 방향키로 이동하세요.<br />탄막을 피하고 제한 시간을 버티면 다음 웨이브로 넘어갑니다.</p>
+        <p>WASD 또는 방향키로 이동하세요.<br />탄막을 피하고 제한 시간을 버티면 다음 웨이브로 넘어갑니다.<br />Wave 1~5 / 6~10 / 11~15로 난이도가 상승하고, 5웨이브마다 고난도 보스가 등장합니다.</p>
         <button id="startButton" type="button">게임 시작</button>
       </div>
 
@@ -59,7 +60,7 @@
 
     <section class="guide">
       <strong>조작:</strong> WASD / 방향키 이동<br />
-      <strong>목표:</strong> 보스 탄막을 피하며 최대한 많은 웨이브 생존
+      <strong>목표:</strong> 15웨이브까지 생존하며 5웨이브마다 등장하는 고난도 보스 돌파
     </section>
   </main>
 

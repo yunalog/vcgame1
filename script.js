@@ -6,6 +6,7 @@ const waveText = document.getElementById('waveText');
 const finalWaveText = document.getElementById('finalWaveText');
 const timeText = document.getElementById('timeText');
 const scoreText = document.getElementById('scoreText');
+const difficultyText = document.getElementById('difficultyText');
 
 const startPanel = document.getElementById('startPanel');
 const upgradePanel = document.getElementById('upgradePanel');
@@ -21,12 +22,13 @@ const nicknameInput = document.getElementById('nicknameInput');
 const rankingList = document.getElementById('rankingList');
 
 const keys = {};
-const FINAL_WAVE = 7;
+const FINAL_WAVE = 15;
 const RANKING_KEY = 'rogueBossPlayLogs';
 
 let gameState = 'ready';
 let lastTime = 0;
 let bulletTimer = 0;
+let specialTimer = 0;
 let waveTimer = 0;
 let scoreTimer = 0;
 let animationId = null;
@@ -50,6 +52,7 @@ const boss = {
 };
 
 let bullets = [];
+let lasers = [];
 let wave = 1;
 let score = 0;
 let waveDuration = 20;
@@ -94,6 +97,13 @@ const upgrades = [
       player.radius = Math.max(8, player.radius - 2);
     },
   },
+  {
+    name: '긴급 보호막',
+    desc: '다음 웨이브 시작 후 2초간 무적입니다.',
+    apply: () => {
+      player.invincible = Math.max(player.invincible, 2);
+    },
+  },
 ];
 
 const audio = {
@@ -109,9 +119,7 @@ function initAudio() {
 
 function resumeAudio() {
   initAudio();
-  if (audio.ctx.state === 'suspended') {
-    audio.ctx.resume();
-  }
+  if (audio.ctx.state === 'suspended') audio.ctx.resume();
 }
 
 function setSoundButtonText() {
@@ -128,9 +136,7 @@ function playTone({ frequency = 440, duration = 0.2, type = 'square', volume = 0
 
   oscillator.type = type;
   oscillator.frequency.setValueAtTime(frequency, now);
-  if (slideTo) {
-    oscillator.frequency.exponentialRampToValueAtTime(slideTo, now + duration);
-  }
+  if (slideTo) oscillator.frequency.exponentialRampToValueAtTime(slideTo, now + duration);
 
   gain.gain.setValueAtTime(0.0001, now);
   gain.gain.exponentialRampToValueAtTime(volume, now + 0.02);
@@ -142,32 +148,24 @@ function playTone({ frequency = 440, duration = 0.2, type = 'square', volume = 0
   oscillator.stop(now + duration + 0.03);
 }
 
-function playHitSound() {
-  playTone({ frequency: 150, slideTo: 70, duration: 0.18, type: 'sawtooth', volume: 0.12 });
-}
-
+function playHitSound() { playTone({ frequency: 150, slideTo: 70, duration: 0.18, type: 'sawtooth', volume: 0.12 }); }
 function playStageClearSound() {
   playTone({ frequency: 392, duration: 0.1, type: 'square', volume: 0.08 });
   setTimeout(() => playTone({ frequency: 523, duration: 0.12, type: 'square', volume: 0.08 }), 90);
   setTimeout(() => playTone({ frequency: 784, duration: 0.18, type: 'square', volume: 0.08 }), 180);
 }
-
 function playStageFailSound() {
   playTone({ frequency: 180, slideTo: 90, duration: 0.45, type: 'triangle', volume: 0.12 });
   setTimeout(() => playTone({ frequency: 100, slideTo: 55, duration: 0.35, type: 'sawtooth', volume: 0.08 }), 130);
 }
-
-function playHoverSound() {
-  playTone({ frequency: 620, duration: 0.045, type: 'square', volume: 0.035 });
-}
-
-function playSelectSound() {
-  playTone({ frequency: 720, duration: 0.08, type: 'square', volume: 0.06 });
-}
-
+function playHoverSound() { playTone({ frequency: 620, duration: 0.045, type: 'square', volume: 0.035 }); }
+function playSelectSound() { playTone({ frequency: 720, duration: 0.08, type: 'square', volume: 0.06 }); }
 function playSaveSound() {
   playTone({ frequency: 523, duration: 0.08, type: 'square', volume: 0.06 });
   setTimeout(() => playTone({ frequency: 659, duration: 0.08, type: 'square', volume: 0.06 }), 80);
+}
+function playSpecialWarningSound() {
+  playTone({ frequency: 260, slideTo: 170, duration: 0.2, type: 'square', volume: 0.07 });
 }
 
 function startAmbience() {
@@ -191,6 +189,20 @@ function stopAmbience() {
   }
 }
 
+function getDifficultyInfo(targetWave = wave) {
+  if (targetWave <= 5) {
+    return { name: '1단계: 악몽의 입구', level: 1, color: '#74f0ff', waveDuration: 20, intervalBonus: 0, speedBonus: 0, countBonus: 0 };
+  }
+  if (targetWave <= 10) {
+    return { name: '2단계: 심연의 추격', level: 2, color: '#ffd166', waveDuration: 23, intervalBonus: -0.16, speedBonus: 35, countBonus: 2 };
+  }
+  return { name: '3단계: 지옥의 난전', level: 3, color: '#ff4d6d', waveDuration: 26, intervalBonus: -0.28, speedBonus: 75, countBonus: 4 };
+}
+
+function isEliteWave(targetWave = wave) {
+  return targetWave % 5 === 0;
+}
+
 function resetGame() {
   player.x = canvas.width / 2;
   player.y = canvas.height - 80;
@@ -202,19 +214,28 @@ function resetGame() {
   player.invincibleBonus = 0;
 
   bullets = [];
+  lasers = [];
   wave = 1;
   score = 0;
-  waveDuration = 20;
-  fireInterval = 1.1;
-  bulletSpeed = 145;
-  bulletCount = 8;
   bulletTimer = 0;
-  waveTimer = waveDuration;
+  specialTimer = 0;
   scoreTimer = 0;
   rankSavedThisRun = false;
   lastResultIsWin = false;
   finalWaveText.textContent = FINAL_WAVE;
+  setWaveStats();
   updateHud();
+}
+
+function setWaveStats() {
+  const difficulty = getDifficultyInfo(wave);
+  waveDuration = difficulty.waveDuration + Math.floor((wave - 1) / 2);
+  fireInterval = Math.max(0.28, 1.1 - (wave - 1) * 0.055 + difficulty.intervalBonus);
+  bulletSpeed = 145 + (wave - 1) * 13 + difficulty.speedBonus;
+  bulletCount = Math.min(28, 8 + Math.floor(wave * 0.9) + difficulty.countBonus);
+  waveTimer = waveDuration;
+  bulletTimer = 0;
+  specialTimer = isEliteWave(wave) ? 2.2 : 999;
 }
 
 function startGame() {
@@ -233,6 +254,7 @@ function startGame() {
 
 function nextWave() {
   bullets = [];
+  lasers = [];
 
   if (wave >= FINAL_WAVE) {
     endGame(true);
@@ -246,12 +268,7 @@ function nextWave() {
 
 function applyWaveDifficulty() {
   wave += 1;
-  waveDuration = Math.min(35, waveDuration + 2);
-  fireInterval = Math.max(0.35, fireInterval - 0.09);
-  bulletSpeed += 18;
-  bulletCount = Math.min(22, bulletCount + 1);
-  waveTimer = waveDuration;
-  bulletTimer = 0;
+  setWaveStats();
 }
 
 function showUpgradePanel() {
@@ -282,18 +299,26 @@ function showUpgradePanel() {
 }
 
 function spawnPattern() {
-  if (wave % 3 === 0) {
-    spawnSpiralBullets();
-  } else if (wave % 2 === 0) {
-    spawnAimedBullets();
-  } else {
-    spawnCircleBullets();
+  if (isEliteWave(wave)) {
+    Math.random() > 0.45 ? spawnSpiralBullets() : spawnAimedBullets();
+    return;
   }
+
+  if (wave % 3 === 0) spawnSpiralBullets();
+  else if (wave % 2 === 0) spawnAimedBullets();
+  else spawnCircleBullets();
+}
+
+function spawnElitePattern() {
+  if (!isEliteWave(wave)) return;
+  playSpecialWarningSound();
+
+  if (Math.random() > 0.5) spawnLaserAttack();
+  else spawnFireworkAttack();
 }
 
 function spawnCircleBullets() {
   const angleOffset = Math.random() * Math.PI * 2;
-
   for (let i = 0; i < bulletCount; i++) {
     const angle = angleOffset + (Math.PI * 2 * i) / bulletCount;
     createBullet(angle, bulletSpeed);
@@ -302,8 +327,8 @@ function spawnCircleBullets() {
 
 function spawnAimedBullets() {
   const baseAngle = Math.atan2(player.y - boss.y, player.x - boss.x);
-  const spread = 0.55;
-  const count = Math.min(9, 3 + Math.floor(wave / 2));
+  const spread = 0.5 + getDifficultyInfo().level * 0.12;
+  const count = Math.min(12, 3 + Math.floor(wave / 2));
 
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0 : i / (count - 1);
@@ -313,12 +338,44 @@ function spawnAimedBullets() {
 }
 
 function spawnSpiralBullets() {
-  const baseAngle = performance.now() / 600;
-  const count = Math.min(14, bulletCount);
+  const baseAngle = performance.now() / (620 - getDifficultyInfo().level * 90);
+  const count = Math.min(18, bulletCount);
 
   for (let i = 0; i < count; i++) {
     const angle = baseAngle + (Math.PI * 2 * i) / count;
     createBullet(angle, bulletSpeed + 20);
+  }
+}
+
+function spawnLaserAttack() {
+  const laserCount = getDifficultyInfo().level === 3 ? 3 : 2;
+  for (let i = 0; i < laserCount; i++) {
+    const x = 90 + Math.random() * (canvas.width - 180);
+    lasers.push({
+      x,
+      width: 18 + getDifficultyInfo().level * 5,
+      warning: 0.75,
+      active: 0.42,
+      total: 1.17,
+      hit: false,
+    });
+  }
+}
+
+function spawnFireworkAttack() {
+  const count = getDifficultyInfo().level === 3 ? 4 : 3;
+  for (let i = 0; i < count; i++) {
+    const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.3;
+    bullets.push({
+      x: boss.x + (Math.random() - 0.5) * 120,
+      y: boss.y,
+      vx: Math.cos(angle) * 90,
+      vy: Math.sin(angle) * 90,
+      radius: 9,
+      color: '#ff7a1a',
+      splitTime: 0.55 + Math.random() * 0.35,
+      splitCount: 8 + getDifficultyInfo().level * 3,
+    });
   }
 }
 
@@ -329,15 +386,18 @@ function createBullet(angle, speed) {
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     radius: 7,
+    color: '#ffd166',
   });
 }
 
 function update(dt) {
   updatePlayer(dt);
   updateBullets(dt);
+  updateLasers(dt);
   checkCollisions();
 
   bulletTimer += dt;
+  specialTimer += dt;
   waveTimer -= dt;
   scoreTimer += dt;
 
@@ -346,17 +406,21 @@ function update(dt) {
     spawnPattern();
   }
 
+  if (specialTimer >= 4.4 && isEliteWave(wave)) {
+    specialTimer = 0;
+    spawnElitePattern();
+  }
+
   if (scoreTimer >= 0.25) {
     scoreTimer = 0;
     score += 1;
   }
 
-  if (player.invincible > 0) {
-    player.invincible -= dt;
-  }
+  if (player.invincible > 0) player.invincible -= dt;
 
   if (waveTimer <= 0) {
     score += wave * 25;
+    if (isEliteWave(wave)) score += 100;
     nextWave();
   }
 
@@ -386,19 +450,43 @@ function updatePlayer(dt) {
 }
 
 function updateBullets(dt) {
+  const newBullets = [];
+
   bullets.forEach((bullet) => {
     bullet.x += bullet.vx * dt;
     bullet.y += bullet.vy * dt;
+
+    if (bullet.splitTime !== undefined) {
+      bullet.splitTime -= dt;
+      if (bullet.splitTime <= 0) {
+        for (let i = 0; i < bullet.splitCount; i++) {
+          const angle = (Math.PI * 2 * i) / bullet.splitCount + Math.random() * 0.12;
+          newBullets.push({
+            x: bullet.x,
+            y: bullet.y,
+            vx: Math.cos(angle) * (bulletSpeed * 0.75),
+            vy: Math.sin(angle) * (bulletSpeed * 0.75),
+            radius: 6,
+            color: '#ff3d00',
+          });
+        }
+        bullet.remove = true;
+      }
+    }
   });
 
-  bullets = bullets.filter((bullet) => {
-    return (
-      bullet.x > -40 &&
-      bullet.x < canvas.width + 40 &&
-      bullet.y > -40 &&
-      bullet.y < canvas.height + 40
-    );
+  bullets.push(...newBullets);
+  bullets = bullets.filter((bullet) => !bullet.remove && bullet.x > -60 && bullet.x < canvas.width + 60 && bullet.y > -60 && bullet.y < canvas.height + 60);
+}
+
+function updateLasers(dt) {
+  lasers.forEach((laser) => {
+    laser.total -= dt;
+    if (laser.warning > 0) laser.warning -= dt;
+    else laser.active -= dt;
   });
+
+  lasers = lasers.filter((laser) => laser.total > 0 && laser.active > -0.05);
 }
 
 function checkCollisions() {
@@ -406,25 +494,36 @@ function checkCollisions() {
 
   for (const bullet of bullets) {
     const distance = Math.hypot(player.x - bullet.x, player.y - bullet.y);
-
     if (distance < player.radius + bullet.radius) {
-      player.hp -= 1;
-      player.invincible = 1.1 + (player.invincibleBonus || 0);
+      damagePlayer();
       bullets = bullets.filter((item) => item !== bullet);
-      playHitSound();
-
-      if (player.hp <= 0) {
-        endGame(false);
-      }
       return;
     }
   }
+
+  for (const laser of lasers) {
+    const activeLaser = laser.warning <= 0 && laser.active > 0;
+    const withinX = Math.abs(player.x - laser.x) < player.radius + laser.width / 2;
+    if (activeLaser && withinX && !laser.hit) {
+      laser.hit = true;
+      damagePlayer();
+      return;
+    }
+  }
+}
+
+function damagePlayer() {
+  player.hp -= 1;
+  player.invincible = 1.1 + (player.invincibleBonus || 0);
+  playHitSound();
+  if (player.hp <= 0) endGame(false);
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawArena();
   drawBoss();
+  drawLasers();
   drawBullets();
   drawPlayer();
 }
@@ -434,17 +533,15 @@ function drawArena() {
   ctx.lineWidth = 1;
 
   for (let x = 0; x < canvas.width; x += 45) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y < canvas.height; y += 45) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
   }
 
-  for (let y = 0; y < canvas.height; y += 45) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
-    ctx.stroke();
+  if (isEliteWave()) {
+    ctx.fillStyle = 'rgba(255, 40, 40, 0.08)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 }
 
@@ -456,18 +553,19 @@ function drawPixelRect(x, y, w, h, color) {
 function drawBoss() {
   const x = boss.x;
   const y = boss.y;
+  const difficulty = getDifficultyInfo();
   const pulse = Math.sin(performance.now() / 180) * 2;
 
-  ctx.fillStyle = 'rgba(255, 0, 50, 0.14)';
+  ctx.fillStyle = isEliteWave() ? 'rgba(255, 0, 50, 0.25)' : 'rgba(255, 0, 50, 0.14)';
   ctx.beginPath();
-  ctx.arc(x, y + 6, 72 + pulse * 3, 0, Math.PI * 2);
+  ctx.arc(x, y + 6, 72 + pulse * 3 + difficulty.level * 3, 0, Math.PI * 2);
   ctx.fill();
 
   drawPixelRect(x - 56, y - 42, 20, 18, '#1a0508');
   drawPixelRect(x + 36, y - 42, 20, 18, '#1a0508');
   drawPixelRect(x - 68, y - 60, 16, 16, '#7c0712');
   drawPixelRect(x + 52, y - 60, 16, 16, '#7c0712');
-  drawPixelRect(x - 42, y - 34, 84, 68, '#8e0e18');
+  drawPixelRect(x - 42, y - 34, 84, 68, isEliteWave() ? '#c1121f' : '#8e0e18');
   drawPixelRect(x - 30, y - 22, 60, 48, '#1a0508');
   drawPixelRect(x - 20, y - 10, 12, 12, '#ff3030');
   drawPixelRect(x + 8, y - 10, 12, 12, '#ff3030');
@@ -477,10 +575,10 @@ function drawBoss() {
   drawPixelRect(x - 50, y + 22, 18, 28, '#1a0508');
   drawPixelRect(x + 32, y + 22, 18, 28, '#1a0508');
 
-  ctx.fillStyle = 'white';
+  ctx.fillStyle = difficulty.color;
   ctx.font = 'bold 18px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(`DEMON Lv.${wave}`, boss.x, boss.y - 78);
+  ctx.fillText(`${isEliteWave() ? 'ELITE ' : ''}DEMON Lv.${wave}`, boss.x, boss.y - 78);
 }
 
 function drawPlayer() {
@@ -501,8 +599,19 @@ function drawBullets() {
   bullets.forEach((bullet) => {
     ctx.beginPath();
     ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffd166';
+    ctx.fillStyle = bullet.color || '#ffd166';
     ctx.fill();
+  });
+}
+
+function drawLasers() {
+  lasers.forEach((laser) => {
+    const activeLaser = laser.warning <= 0 && laser.active > 0;
+    ctx.fillStyle = activeLaser ? 'rgba(255, 20, 20, 0.72)' : 'rgba(255, 255, 255, 0.22)';
+    ctx.fillRect(laser.x - laser.width / 2, 0, laser.width, canvas.height);
+
+    ctx.fillStyle = activeLaser ? 'rgba(255, 240, 160, 0.85)' : 'rgba(255, 60, 60, 0.25)';
+    ctx.fillRect(laser.x - 2, 0, 4, canvas.height);
   });
 }
 
@@ -511,6 +620,10 @@ function updateHud() {
   waveText.textContent = wave;
   timeText.textContent = Math.max(0, Math.ceil(waveTimer));
   scoreText.textContent = score;
+  const difficulty = getDifficultyInfo();
+  if (difficultyText) {
+    difficultyText.textContent = `${difficulty.name}${isEliteWave() ? ' / 고난도 보스' : ''}`;
+  }
 }
 
 function endGame(isWin) {
@@ -522,11 +635,8 @@ function endGame(isWin) {
   resultTitle.textContent = isWin ? 'Ending Clear!' : 'Game Over';
   resultText.textContent = `결과: ${isWin ? '엔딩 클리어' : '게임오버'} / 도달 웨이브: ${wave}/${FINAL_WAVE} / 최종 점수: ${score}`;
 
-  if (isWin) {
-    playStageClearSound();
-  } else {
-    playStageFailSound();
-  }
+  if (isWin) playStageClearSound();
+  else playStageFailSound();
 
   rankSavedThisRun = false;
   rankForm.classList.remove('hidden');
@@ -540,7 +650,6 @@ function endGame(isWin) {
 function getRankings() {
   const saved = localStorage.getItem(RANKING_KEY);
   if (!saved) return [];
-
   try {
     const parsed = JSON.parse(saved);
     return Array.isArray(parsed) ? parsed : [];
@@ -589,27 +698,17 @@ function renderRankings() {
 
 function gameLoop(currentTime) {
   if (gameState !== 'playing') return;
-
   const dt = Math.min((currentTime - lastTime) / 1000, 0.033);
   lastTime = currentTime;
-
   update(dt);
   draw();
-
   animationId = requestAnimationFrame(gameLoop);
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
-window.addEventListener('keydown', (event) => {
-  keys[event.key] = true;
-});
-
-window.addEventListener('keyup', (event) => {
-  keys[event.key] = false;
-});
+window.addEventListener('keydown', (event) => { keys[event.key] = true; });
+window.addEventListener('keyup', (event) => { keys[event.key] = false; });
 
 function handleStartClick(event) {
   event.preventDefault();
@@ -622,11 +721,8 @@ restartButton.addEventListener('click', handleStartClick);
 soundButton.addEventListener('click', () => {
   audio.enabled = !audio.enabled;
   setSoundButtonText();
-  if (audio.enabled && (gameState === 'playing' || gameState === 'upgrade')) {
-    startAmbience();
-  } else {
-    stopAmbience();
-  }
+  if (audio.enabled && (gameState === 'playing' || gameState === 'upgrade')) startAmbience();
+  else stopAmbience();
 });
 
 rankForm.addEventListener('submit', (event) => {

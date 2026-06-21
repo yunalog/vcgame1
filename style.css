@@ -35,7 +35,7 @@ body {
 
 .hud {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -240,4 +240,11 @@ button:hover {
 .upgrade-card {
   position: relative;
   z-index: 11;
+}
+
+
+#difficultyText {
+  display: inline-block;
+  min-width: 110px;
+  color: #ffd166;
 }

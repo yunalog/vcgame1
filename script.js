@@ -53,11 +53,12 @@ let currentRunLabel = '무한모드';
 const player = {
   x: canvas.width / 2,
   y: canvas.height - 80,
-  radius: 14,
+  radius: 9,
   hp: 3,
   maxHp: 3,
   speed: 260,
   invincible: 0,
+  sleepText: 0,
 };
 
 const boss = {
@@ -114,7 +115,7 @@ const upgrades = [
     name: '크기 감소',
     desc: '플레이어 충돌 범위가 작아집니다.',
     apply: () => {
-      player.radius = Math.max(8, player.radius - 2);
+      player.radius = Math.max(6, player.radius - 1);
     },
   },
   {
@@ -233,10 +234,10 @@ function getDifficultyInfo(targetWave = wave) {
 
   const stageData = {
     1: { name: '1단계', pattern: '기본 탄막', color: '#74f0ff', waveDuration: 18, speedBonus: 0, countBonus: 0, intervalBonus: 0 },
-    2: { name: '2단계', pattern: '추격 + 회전', color: '#ffd166', waveDuration: 19, speedBonus: 24, countBonus: 2, intervalBonus: -0.08 },
-    3: { name: '3단계', pattern: '올빼미의 응시', color: '#d87cff', waveDuration: 20, speedBonus: 48, countBonus: 4, intervalBonus: -0.16 },
-    4: { name: '4단계', pattern: '폭죽 2차 탄막', color: '#ff4d6d', waveDuration: 21, speedBonus: 72, countBonus: 5, intervalBonus: -0.24 },
-    5: { name: '5단계', pattern: '가로/세로 레이저', color: '#ff1b1c', waveDuration: 23, speedBonus: 96, countBonus: 6, intervalBonus: -0.32 },
+    2: { name: '2단계', pattern: '추격 + 회전', color: '#ffd166', waveDuration: 19, speedBonus: 14, countBonus: 1, intervalBonus: -0.04 },
+    3: { name: '3단계', pattern: '올빼미의 응시', color: '#d87cff', waveDuration: 20, speedBonus: 20, countBonus: 1, intervalBonus: -0.05 },
+    4: { name: '4단계', pattern: '거리형 폭죽 탄막', color: '#ff4d6d', waveDuration: 21, speedBonus: 30, countBonus: 2, intervalBonus: -0.08 },
+    5: { name: '5단계', pattern: '레이저 + 흡혈 탄막', color: '#ff1b1c', waveDuration: 23, speedBonus: 42, countBonus: 3, intervalBonus: -0.11 },
   };
 
   return {
@@ -244,7 +245,7 @@ function getDifficultyInfo(targetWave = wave) {
     stage,
     stageWave,
     isBoss: bossWave,
-    bossName: bossWave ? ['','검은 구름','초승달','올빼미','늑대인간','뱀파이어'][stage] : `악몽 ${stage}-${stageWave}`, 
+    bossName: bossWave ? ['','검은 구름','초승달','올빼미','늑대인간','뱀파이어'][stage] : '', 
   };
 }
 
@@ -255,12 +256,13 @@ function isEliteWave(targetWave = wave) {
 function resetGame(startWave = selectedMode.startWave, endWave = selectedMode.endWave, infinite = selectedMode.infinite) {
   player.x = canvas.width / 2;
   player.y = canvas.height - 80;
-  player.radius = 14;
+  player.radius = 7;
   player.hp = 3;
   player.maxHp = 3;
   player.speed = 260;
   player.invincible = 0;
   player.invincibleBonus = 0;
+  player.sleepText = 0;
 
   bullets = [];
   lasers = [];
@@ -291,12 +293,12 @@ function setWaveStats() {
   const bossBonus = difficulty.isBoss ? 1 : 0;
 
   waveDuration = difficulty.waveDuration + bossBonus * 7;
-  fireInterval = Math.max(0.26, 1.05 - stage * 0.08 - stageWave * 0.035 + difficulty.intervalBonus - bossBonus * 0.12);
-  bulletSpeed = 135 + stage * 24 + stageWave * 8 + difficulty.speedBonus + bossBonus * 24;
-  bulletCount = Math.min(30, 7 + stage * 2 + stageWave + difficulty.countBonus + bossBonus * 5);
+  fireInterval = Math.max(0.46, 1.08 - stage * 0.045 - stageWave * 0.025 + difficulty.intervalBonus - bossBonus * 0.08);
+  bulletSpeed = 122 + stage * 14 + stageWave * 5 + difficulty.speedBonus + bossBonus * 14;
+  bulletCount = Math.min(22, 6 + stage + stageWave + difficulty.countBonus + bossBonus * 3);
   waveTimer = waveDuration;
   bulletTimer = 0;
-  specialTimer = difficulty.stage >= 3 ? 1.6 : 999;
+  specialTimer = difficulty.stage >= 3 ? 2.4 : 999;
   starTimer = 0;
   collectedStars = 0;
   spawnedStarsThisWave = 0;
@@ -396,10 +398,10 @@ function spawnPattern() {
 
   if (info.stage === 4) {
     if (info.isBoss) {
-      spawnFireworkAttack(1.35);
-      setTimeout(() => spawnCircleBullets(0.8), 260);
+      spawnFireworkAttack(1.05);
+      setTimeout(() => spawnCircleBullets(0.65), 360);
     } else {
-      Math.random() < 0.55 ? spawnFireworkAttack() : spawnAimedBullets();
+      Math.random() < 0.24 ? spawnFireworkAttack(0.75) : spawnAimedBullets(0.85);
     }
     return;
   }
@@ -409,7 +411,7 @@ function spawnPattern() {
   if (roll < 0.24) spawnCircleBullets();
   else if (roll < 0.48) spawnAimedBullets();
   else if (roll < 0.72) spawnSpiralBullets();
-  else spawnFireworkAttack();
+  else spawnFireworkAttack(0.65);
 }
 
 function spawnElitePattern() {
@@ -436,15 +438,15 @@ function spawnElitePattern() {
   }
 
   if (info.stage === 4) {
-    spawnFireworkAttack(info.isBoss ? 1.45 : 1);
-    if (info.isBoss) setTimeout(() => spawnFireworkAttack(1.05), 420);
+    spawnFireworkAttack(info.isBoss ? 0.9 : 0.65);
+    if (info.isBoss) setTimeout(() => spawnFireworkAttack(0.55), 760);
     return;
   }
 
   if (info.stage === 5) {
     spawnLaserAttack(info.isBoss ? 1.35 : 1);
     if (info.isBoss) {
-      setTimeout(() => spawnFireworkAttack(1.1), 350);
+      setTimeout(() => spawnFireworkAttack(0.55), 680);
       setTimeout(() => spawnDangerZoneAttack(1.1), 700);
     }
   }
@@ -461,8 +463,8 @@ function spawnCircleBullets(multiplier = 1) {
 
 function spawnAimedBullets(multiplier = 1) {
   const baseAngle = Math.atan2(player.y - boss.y, player.x - boss.x);
-  const spread = 0.5 + getDifficultyInfo().stage * 0.12;
-  const count = Math.min(16, Math.floor((3 + Math.floor(wave / 2)) * multiplier));
+  const spread = 0.42 + getDifficultyInfo().stage * 0.09;
+  const count = Math.min(11, Math.floor((3 + Math.floor(wave / 3)) * multiplier));
 
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0 : i / (count - 1);
@@ -472,8 +474,8 @@ function spawnAimedBullets(multiplier = 1) {
 }
 
 function spawnSpiralBullets(multiplier = 1) {
-  const baseAngle = performance.now() / (620 - getDifficultyInfo().stage * 90);
-  const count = Math.min(24, Math.floor(bulletCount * multiplier));
+  const baseAngle = performance.now() / (760 - getDifficultyInfo().stage * 70);
+  const count = Math.min(18, Math.floor(bulletCount * multiplier));
 
   for (let i = 0; i < count; i++) {
     const angle = baseAngle + (Math.PI * 2 * i) / count;
@@ -491,10 +493,10 @@ function spawnLaserAttack(multiplier = 1) {
       orientation: isVertical ? 'vertical' : 'horizontal',
       x: 80 + Math.random() * (canvas.width - 160),
       y: 80 + Math.random() * (canvas.height - 160),
-      width: 16 + difficulty.stage * 4,
-      warning: 0.8,
-      active: 0.46,
-      total: 1.26,
+      width: 14 + difficulty.stage * 3,
+      warning: 0.95,
+      active: 0.38,
+      total: 1.33,
       hit: false,
     });
   }
@@ -502,18 +504,21 @@ function spawnLaserAttack(multiplier = 1) {
 
 function spawnFireworkAttack(multiplier = 1) {
   const info = getDifficultyInfo();
-  const count = Math.floor((info.stage >= 5 ? 5 : 4) * multiplier);
+  const baseCount = info.stage >= 5 ? 2 : 1;
+  const count = Math.max(1, Math.floor(baseCount * multiplier));
+
   for (let i = 0; i < count; i++) {
-    const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.3;
+    const angle = Math.PI / 2 + (Math.random() - 0.5) * 0.9;
     bullets.push({
-      x: boss.x + (Math.random() - 0.5) * 120,
+      x: boss.x + (Math.random() - 0.5) * 100,
       y: boss.y,
-      vx: Math.cos(angle) * 90,
-      vy: Math.sin(angle) * 90,
-      radius: 9,
+      vx: Math.cos(angle) * 82,
+      vy: Math.sin(angle) * 105,
+      radius: 8,
       color: '#ff7a1a',
-      splitTime: 0.55 + Math.random() * 0.35,
-      splitCount: 8 + info.stage * 3 + (info.isBoss ? 4 : 0),
+      splitTime: 1.15 + Math.random() * 0.35,
+      splitY: boss.y + 270 + Math.random() * 110,
+      splitCount: 3 + Math.floor(info.stage * 1.1) + (info.isBoss ? 1 : 0),
     });
   }
 }
@@ -566,7 +571,7 @@ function update(dt) {
     spawnPattern();
   }
 
-  if (specialTimer >= (isBossWave(wave) ? 3.2 : 4.6) && getDifficultyInfo().stage >= 3) {
+  if (specialTimer >= (isBossWave(wave) ? 4.2 : 5.8) && getDifficultyInfo().stage >= 3) {
     specialTimer = 0;
     spawnElitePattern();
   }
@@ -582,6 +587,7 @@ function update(dt) {
   }
 
   if (player.invincible > 0) player.invincible -= dt;
+  if (player.sleepText > 0) player.sleepText -= dt;
 
   if (waveTimer <= 0) {
     if (collectedStars < STAR_GOAL) {
@@ -628,15 +634,16 @@ function updateBullets(dt) {
 
     if (bullet.splitTime !== undefined) {
       bullet.splitTime -= dt;
-      if (bullet.splitTime <= 0) {
+      const farEnoughFromBoss = bullet.splitY !== undefined && bullet.y >= bullet.splitY;
+      if (bullet.splitTime <= 0 || farEnoughFromBoss) {
         for (let i = 0; i < bullet.splitCount; i++) {
-          const angle = (Math.PI * 2 * i) / bullet.splitCount + Math.random() * 0.12;
+          const angle = (Math.PI * 2 * i) / bullet.splitCount + Math.random() * 0.1;
           newBullets.push({
             x: bullet.x,
             y: bullet.y,
-            vx: Math.cos(angle) * (bulletSpeed * 0.75),
-            vy: Math.sin(angle) * (bulletSpeed * 0.75),
-            radius: 6,
+            vx: Math.cos(angle) * (bulletSpeed * 0.45),
+            vy: Math.sin(angle) * (bulletSpeed * 0.45),
+            radius: 5,
             color: '#ff3d00',
           });
         }
@@ -673,11 +680,14 @@ function updateDangerZones(dt) {
 function spawnStar() {
   if (!currentRunIsInfinite && spawnedStarsThisWave >= MAX_STARS_PER_WAVE) return;
 
-  const margin = 38;
-  const minY = 145;
+  // 하단 목표/HP 안내 UI와 겹치지 않도록 별은 전투 구역 안쪽에만 생성
+  const margin = 42;
+  const minY = 138;
+  const bottomSafeArea = 126;
+  const maxY = canvas.height - bottomSafeArea;
   const star = {
     x: margin + Math.random() * (canvas.width - margin * 2),
-    y: minY + Math.random() * (canvas.height - minY - margin),
+    y: minY + Math.random() * Math.max(1, maxY - minY),
     radius: 11,
     pulse: Math.random() * Math.PI * 2,
   };
@@ -763,6 +773,7 @@ function checkCollisions() {
 function damagePlayer() {
   player.hp -= 1;
   player.invincible = 1.1 + (player.invincibleBonus || 0);
+  player.sleepText = 0.85;
   playHitSound();
   if (player.hp <= 0) endGame(false);
 }
@@ -893,7 +904,7 @@ function drawPlayer() {
 
   const x = Math.round(player.x);
   const y = Math.round(player.y);
-  const s = Math.max(2, Math.round(player.radius / 7));
+  const s = 0.65;
 
   // shadow
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -924,10 +935,12 @@ function drawPlayer() {
   drawPixelRect(x - 9 * s, y + 26 * s, 8 * s, 3 * s, '#fff4da');
   drawPixelRect(x + 1 * s, y + 26 * s, 8 * s, 3 * s, '#fff4da');
 
-  ctx.font = 'bold 12px monospace';
-  ctx.fillStyle = '#ffcc66';
-  ctx.textAlign = 'center';
-  ctx.fillText('Zzz', x, y - 30);
+  if (player.sleepText > 0) {
+    ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = '#ffcc66';
+    ctx.textAlign = 'center';
+    ctx.fillText('Zzz', x, y - 23);
+  }
 }
 
 function drawBullets() {

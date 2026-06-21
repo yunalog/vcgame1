@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'NeoDunggeunmo';
+  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2307-2@1.0/NeoDunggeunmoPro-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -11,12 +19,13 @@
   --gold: #ffcc66;
   --cream: #fff4da;
   --shadow: #07040a;
+  --game-font: 'NeoDunggeunmo', 'Malgun Gothic', '맑은 고딕', 'Courier New', monospace;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: 'Courier New', monospace;
+  font-family: var(--game-font);
   color: var(--cream);
   background:
     linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
@@ -180,7 +189,6 @@ canvas {
 .hud-top-center,
 .hud-top-right,
 .hud-bottom-left,
-.hud-stage,
 .hud-objective {
   position: absolute;
   padding: 6px 9px;
@@ -212,13 +220,6 @@ canvas {
   left: 12px;
   bottom: 18px;
   color: #ff8ab8;
-}
-
-.hud-stage {
-  top: 56px;
-  left: 12px;
-  font-size: 13px;
-  color: #ffd9ec;
 }
 
 .hud-objective {
@@ -379,6 +380,20 @@ canvas {
   color: var(--gold);
 }
 
+.ranking-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  line-height: 1.45;
+}
+
+.ranking-title span {
+  color: #9c8f9f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .ranking-list {
   margin: 0;
   padding-left: 26px;
@@ -393,8 +408,8 @@ canvas {
 
 .rank-meta,
 .ranking-note {
-  color: #ffd9ec;
-  font-size: 13px;
+  color: #9c8f9f;
+  font-size: 11px;
 }
 
 .guide {
